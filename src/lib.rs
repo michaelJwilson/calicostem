@@ -7,26 +7,29 @@ use rayon::prelude::*;
 use statrs::function::gamma::ln_gamma;
 
 #[pyfunction]
-fn nb(n: PyReadonlyArray1<'_, i64>, p: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn nb(k: PyReadonlyArray1<'_, i64>, n: PyReadonlyArray1<'_, i64>, p: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
     let n = n.to_vec()?;
+    let k = k.to_vec()?;
     let p = p.to_vec()?;
 
-    let probs: Vec<f64> = n.par_iter().zip(p.par_iter())
-        .map(|(&n_i, &p_i)| {
+    let probs: Vec<f64> = n.par_iter().zip(k.par_iter()).zip(p.par_iter())
+        .map(|((&n_i, &k_i), &p_i)| {
             let neg_binom: NegativeBinomial = NegativeBinomial::new(n_i as f64, p_i).unwrap();
-            let k: u64 = 10; // Example usage, adjust as needed
-            neg_binom.pmf(k)
+            neg_binom.ln_pmf(k_i.try_into().unwrap())
         })
         .collect();
 
     Ok(probs)
 }
-
+/*
 #[pyfunction]
-fn beta_binomial(n: PyReadonlyArray1<'_, i64>, k: PyReadonlyArray1<'_, i64>, alphas: PyReadonlyArray1<'_, f64>, betas: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
-    iterator = n.par_iter().zip(k.par_iter()).zip(alphas.par_iter()).zip(betas.par_iter())
+fn bb(k: PyReadonlyArray1<'_, i64>, n: PyReadonlyArray1<'_, i64>, alphas: PyReadonlyArray1<'_, f64>, betas: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+    let n = n.to_vec()?;
+    let k = k.to_vec()?;
+    let alphas = alphas.to_vec()?;
+    let betas = betas.to_vec()?;
     
-    let probs: Vec<f64> = iterator
+    let probs: Vec<f64> = n.par_iter().zip(k.par_iter()).zip(alphas.par_iter()).zip(betas.par_iter())
         .map(|(((&n_i, &k_i), &a_i), &b_i)| {
             let ln_binom_coeff = ln_gamma((n_i + 1) as f64) - ln_gamma((k_i + 1) as f64) - ln_gamma((n_i - k_i + 1) as f64);
             let ln_beta_k_alpha = ln_gamma(k_i as f64 + a_i) + ln_gamma((n_i - k_i) as f64 + b_i) - ln_gamma(n_i as f64 + a_i + b_i);
@@ -38,11 +41,12 @@ fn beta_binomial(n: PyReadonlyArray1<'_, i64>, k: PyReadonlyArray1<'_, i64>, alp
 
     Ok(probs)
 }
+*/
 
 #[pymodule]
 #[pyo3(name="core")]
 fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(nb, m)?)?;
-    m.add_function(wrap_pyfunction!(beta_binomial, m)?)?;
+    // m.add_function(wrap_pyfunction!(bb, m)?)?;
     Ok(())
 }

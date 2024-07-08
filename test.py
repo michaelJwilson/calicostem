@@ -1,38 +1,107 @@
+import pytest
 import numpy as np
 import core
 import scipy
 import line_profiler
+from concurrent.futures import ThreadPoolExecutor
 
-@line_profiler.profile
-def main():
-    NN = 100_000
+NUM_THREADS=1
 
-    # NB 1 -> 100.
+def compute_nbinom_pmf_chunk(args):
+    data_chunk, n, p = args
+    return scipy.stats.nbinom.logpmf(data_chunk, n, p)
+
+def thread_nbinom(data, n, p, num_threads=NUM_THREADS):
+    executor = ThreadPoolExecutor(max_workers=NUM_THREADS)
+    
+    data_chunks = np.array_split(data, num_threads)
+    n_chunks = np.array_split(n, num_threads)
+    p_chunks = np.array_split(p, num_threads)
+
+    args = [xx for xx in zip(data_chunks, n_chunks, p_chunks)]
+    results = executor.map(compute_nbinom_pmf_chunk, args)
+
+    return np.concatenate(list(results))
+
+@pytest.fixture
+def mock_data():
+    NN = 10
+    # NN = 100_000
+    # NN = 213_157_056                                                                                                                                                               
+    # NB 1 -> 100.                                                                                                                                                                  
     ns = 100 + np.arange(NN)
     ps = 0.5 * np.ones_like(ns)
-    ks = 10. * np.ones_like(ns, dtype=float)
+    ks = 10 * np.ones_like(ns)
 
-    exp = scipy.stats.nbinom.pmf(ks, ns, ps)
-    result = core.nb(ns, ps)
-
-    # print(exp[:5])
-    # print(result[:5])
+    exp = scipy.stats.nbinom.logpmf(ks, ns, ps)
     
-    assert np.allclose(exp, result)
+    return ks, ns, ps, exp
 
-    # NB see https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.betabinom.html
-    exp = scipy.stats.betabinom.logpmf(ks, ns, 1., 1.)
+def test_exp(mock_data, benchmark):
+    ks, ns, ps, exp = mock_data
 
-    alphas = np.ones_like(ks)
-    betas = np.ones_like(ks)
-    ks = ks.astype(int)
+    def wrap_exp():
+        return scipy.stats.nbinom.logpmf(ks, ns, ps)
 
-    result = core.beta_binomial(ns, ks, alphas, betas)
+    exp2 = benchmark(wrap_exp)
+
+    assert np.allclose(exp, exp2)
+    
+def test_rust(mock_data, benchmark):
+    ks, ns, ps, exp = mock_data
+
+    def wrap_rust():
+        return core.nb(ks, ns, ps)
+        
+    rust_result = benchmark(wrap_rust)
+
+    assert np.allclose(exp, rust_result)
+
+def test_thread(mock_data, benchmark):
+    ks, ns, ps, exp = mock_data
+
+    def wrap_thread():
+        return thread_nbinom(ks, ns, ps)
+    
+    thread_result = benchmark(wrap_thread)
+
+    assert np.allclose(exp, thread_result)
+    
+"""    
+# @line_profiler.profile
+def test_benchmark(benchmark, mock_data):
+    # rust_result = core.nb(ks, ns, ps)
+    # thread_result = thread_nbinom(ks, ns, ps)
 
     # print(exp[:5])
-    # print(result[:5])
+    # print(thread_result[:5])
+    # print(rust_result[:5])
+    
+    def wrap_exp():
+        return test_exp(mock_data)
 
-    assert np.allclose(exp, result)
+    def wrap_rust():
+        return test_rust(mock_data)
+    
+    exp = benchmark(wrap_exp)
+    rust_result = benchmark(wrap_rust)
+    # thread_result = benchmark(test_thread)(mock_data)
+    
+    '''
+    # NB see https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.betabinom.html
+    exp = scipy.stats.betabinom.logpmf(ks, ns, 10., 20.)
 
+    alphas = 10. * np.ones_like(ks, dtype=float)
+    betas = 20. * np.ones_like(ks, dtype=float)
+
+    result = core.bb(ks, ns, alphas, betas)
+
+    print(exp[:5])
+    print(result[:5])
+
+    # assert np.allclose(exp, result)
+    '''
+"""
+    
 if __name__ == "__main__":
     main()
