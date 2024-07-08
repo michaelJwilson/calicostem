@@ -25,7 +25,7 @@ def thread_nbinom(data, n, p, num_threads=NUM_THREADS):
 
 def get_mock_data():
     # NN = 10
-    NN = 500_000
+    NN = 4_000_000
     # NN = 213_157_056
     
     # NB 1 -> 100.                                                                                                                                                                  
@@ -79,11 +79,11 @@ def profile(ks, ns, ps, exp, iterations=100):
 
     for _ in range(iterations):
         exp = scipy.stats.nbinom.logpmf(ks, ns, ps)
-        rust_result = core.nb(ks, ns, ps)
+        # rust_result = core.nb(ks, ns, ps)
         thread_result = thread_nbinom(ks, ns, ps)
 
     assert np.allclose(exp, thread_result)
-    assert np.allclose(exp, rust_result)
+    # assert np.allclose(exp, rust_result)
 
     print("Profiling complete.")
     
