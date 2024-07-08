@@ -4,7 +4,7 @@ import scipy
 
 @profile
 def main():
-    NN = 100_000
+    NN = 1_000_000
 
     ns = 1 + np.arange(NN)
     ps = 0.5 * np.ones_like(ns)
@@ -13,6 +13,9 @@ def main():
     exp = scipy.stats.nbinom.pmf(ks, ns, ps)
     result = core.nb(ns, ps)
 
+    print(exp[:5])
+    print(result[:5])
+    
     assert np.allclose(exp, result)
 
     
