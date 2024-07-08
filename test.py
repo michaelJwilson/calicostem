@@ -22,7 +22,12 @@ def main():
 
     # NB see https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.betabinom.html
     exp = scipy.stats.betabinom.logpmf(ks, ns, 1., 1.)
-    result = core.beta_binomial(ns, ks.astype(int), np.ones_like(ks), np.ones_like(ks))
+
+    alphas = np.ones_like(ks)
+    betas = np.ones_like(ks)
+    ks = ks.astype(int)
+
+    result = core.beta_binomial(ns, ks, alphas, betas)
 
     # print(exp[:5])
     # print(result[:5])
