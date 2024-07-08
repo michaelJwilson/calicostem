@@ -1,9 +1,6 @@
 extern crate statrs;
 
-use statrs::{distribution::{Beta, Discrete, NegativeBinomial}, function::beta};
-use crate::statrs::distribution::Continuous;
-use ndarray::Array;
-use numpy::{PyArray2,IntoPyArray};
+use statrs::{distribution::{Discrete, NegativeBinomial}};
 use pyo3::prelude::*;
 use numpy::{PyReadonlyArray1};
 use rayon::prelude::*;
@@ -37,9 +34,7 @@ fn beta_binomial(n: PyReadonlyArray1<'_, i64>, k: PyReadonlyArray1<'_, i64>, alp
             let ln_binom_coeff = ln_gamma((n_i + 1) as f64) - ln_gamma((k_i + 1) as f64) - ln_gamma((n_i - k_i + 1) as f64);
             let ln_beta_k_alpha = ln_gamma(k_i as f64 + a_i) + ln_gamma((n_i - k_i) as f64 + b_i) - ln_gamma(n_i as f64 + a_i + b_i);
             let ln_beta_alpha_beta = ln_gamma(a_i + b_i) - ln_gamma(a_i) - ln_gamma(b_i);
-
-            let ln_pmf = ln_binom_coeff + ln_beta_k_alpha - ln_beta_alpha_beta;
-                   
+            
             ln_binom_coeff + ln_beta_k_alpha - ln_beta_alpha_beta
         })
         .collect();
