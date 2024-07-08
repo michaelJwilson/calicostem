@@ -8,17 +8,29 @@ use statrs::function::gamma::ln_gamma;
 
 #[pyfunction]
 fn nb(k: PyReadonlyArray1<'_, i64>, n: PyReadonlyArray1<'_, i64>, p: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
-    let n = n.to_vec()?;
     let k = k.to_vec()?;
+    let n = n.to_vec()?;
     let p = p.to_vec()?;
 
+    // let mut probs: Vec<f64> = Vec::new();
+    /*
+    (&k, &n, &p).into_par_iter()
+        .map(|(k_i, n_i, p_i)| {
+            ln_gamma((k_i + n_i) as f64) - ln_gamma((*n_i) as f64) - ln_gamma((*k_i) as f64);
+        }).collect_into_vec(&mut probs);
+    */
+    
     let probs: Vec<f64> = n.par_iter().zip(k.par_iter()).zip(p.par_iter())
         .map(|((&n_i, &k_i), &p_i)| {
             let neg_binom: NegativeBinomial = NegativeBinomial::new(n_i as f64, p_i).unwrap();
             neg_binom.ln_pmf(k_i.try_into().unwrap())
+
+            // let interim = ln_gamma((k_i + n_i) as f64) - ln_gamma((n_i) as f64) - ln_gamma((k_i) as f64);
+            // let result = interim + (n_i as f64) * (p_i.ln()) + (k_i as f64) * (1.0 - p_i).ln();
+            // result
         })
         .collect();
-
+    
     Ok(probs)
 }
 /*

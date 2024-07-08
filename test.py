@@ -5,7 +5,7 @@ import scipy
 import line_profiler
 from concurrent.futures import ThreadPoolExecutor
 
-NUM_THREADS=1
+NUM_THREADS = 4
 
 def compute_nbinom_pmf_chunk(args):
     data_chunk, n, p = args
@@ -23,11 +23,11 @@ def thread_nbinom(data, n, p, num_threads=NUM_THREADS):
 
     return np.concatenate(list(results))
 
-@pytest.fixture
-def mock_data():
-    NN = 10
-    # NN = 100_000
-    # NN = 213_157_056                                                                                                                                                               
+def get_mock_data():
+    # NN = 10
+    NN = 500_000
+    # NN = 213_157_056
+    
     # NB 1 -> 100.                                                                                                                                                                  
     ns = 100 + np.arange(NN)
     ps = 0.5 * np.ones_like(ns)
@@ -36,6 +36,10 @@ def mock_data():
     exp = scipy.stats.nbinom.logpmf(ks, ns, ps)
     
     return ks, ns, ps, exp
+
+@pytest.fixture
+def mock_data():
+    return get_mock_data()
 
 def test_exp(mock_data, benchmark):
     ks, ns, ps, exp = mock_data
@@ -55,6 +59,9 @@ def test_rust(mock_data, benchmark):
         
     rust_result = benchmark(wrap_rust)
 
+    # print(exp[:5])
+    # print(rust_result[:5])
+    
     assert np.allclose(exp, rust_result)
 
 def test_thread(mock_data, benchmark):
@@ -67,27 +74,20 @@ def test_thread(mock_data, benchmark):
 
     assert np.allclose(exp, thread_result)
     
-"""    
-# @line_profiler.profile
-def test_benchmark(benchmark, mock_data):
-    # rust_result = core.nb(ks, ns, ps)
-    # thread_result = thread_nbinom(ks, ns, ps)
+@line_profiler.profile
+def profile(ks, ns, ps, exp, iterations=100):
 
-    # print(exp[:5])
-    # print(thread_result[:5])
-    # print(rust_result[:5])
-    
-    def wrap_exp():
-        return test_exp(mock_data)
+    for _ in range(iterations):
+        exp = scipy.stats.nbinom.logpmf(ks, ns, ps)
+        rust_result = core.nb(ks, ns, ps)
+        thread_result = thread_nbinom(ks, ns, ps)
 
-    def wrap_rust():
-        return test_rust(mock_data)
+    assert np.allclose(exp, thread_result)
+    assert np.allclose(exp, rust_result)
+
+    print("Profiling complete.")
     
-    exp = benchmark(wrap_exp)
-    rust_result = benchmark(wrap_rust)
-    # thread_result = benchmark(test_thread)(mock_data)
-    
-    '''
+    """
     # NB see https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.betabinom.html
     exp = scipy.stats.betabinom.logpmf(ks, ns, 10., 20.)
 
@@ -100,8 +100,10 @@ def test_benchmark(benchmark, mock_data):
     print(result[:5])
 
     # assert np.allclose(exp, result)
-    '''
-"""
+    """
+
     
 if __name__ == "__main__":
-    main()
+    mock_data = get_mock_data()
+    
+    profile(*mock_data)
