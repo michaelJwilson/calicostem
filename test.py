@@ -1,23 +1,33 @@
 import numpy as np
 import core
 import scipy
+import line_profiler
 
-@profile
+@line_profiler.profile
 def main():
-    NN = 1_000_000
+    NN = 100_000
 
-    ns = 1 + np.arange(NN)
+    # NB 1 -> 100.
+    ns = 100 + np.arange(NN)
     ps = 0.5 * np.ones_like(ns)
     ks = 10. * np.ones_like(ns, dtype=float)
 
     exp = scipy.stats.nbinom.pmf(ks, ns, ps)
     result = core.nb(ns, ps)
 
-    print(exp[:5])
-    print(result[:5])
+    # print(exp[:5])
+    # print(result[:5])
     
     assert np.allclose(exp, result)
 
-    
+    # NB see https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.betabinom.html
+    exp = scipy.stats.betabinom.logpmf(ks, ns, 1., 1.)
+    result = core.beta_binomial(ns, ks.astype(int), np.ones_like(ks), np.ones_like(ks))
+
+    # print(exp[:5])
+    # print(result[:5])
+
+    assert np.allclose(exp, result)
+
 if __name__ == "__main__":
     main()
