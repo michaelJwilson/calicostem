@@ -24,12 +24,15 @@ fn nb(n: PyReadonlyArray1<'_, i64>, p: PyReadonlyArray1<'_, f64>) -> PyResult<Ve
 
 #[pyfunction]
 fn beta_binomial(n: PyReadonlyArray1<'_, i64>, k: PyReadonlyArray1<'_, i64>, alphas: PyReadonlyArray1<'_, f64>, betas: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
-    let n: Vec<i64> = n.to_vec()?;
-    let k: Vec<i64> = k.to_vec()?;
-    let alphas: Vec<f64> = alphas.to_vec()?;
-    let betas: Vec<f64> = betas.to_vec()?;
+    // let n: Vec<i64> = n.to_vec()?;
+    // let k: Vec<i64> = k.to_vec()?;
+    // let alphas: Vec<f64> = alphas.to_vec()?;
+    // let betas: Vec<f64> = betas.to_vec()?;
 
-    let probs: Vec<f64> = n.par_iter().zip(k.par_iter()).zip(alphas.par_iter()).zip(betas.par_iter())
+    iterator = n.par_iter().zip(k.par_iter()).zip(alphas.par_iter()).zip(betas.par_iter())
+    // iterator = n.iter().zip(k.iter()).zip(alphas.iter()).zip(betas.iter())
+
+    let probs: Vec<f64> = iterator
         .map(|(((&n_i, &k_i), &a_i), &b_i)| {
             let ln_binom_coeff = ln_gamma((n_i + 1) as f64) - ln_gamma((k_i + 1) as f64) - ln_gamma((n_i - k_i + 1) as f64);
             let ln_beta_k_alpha = ln_gamma(k_i as f64 + a_i) + ln_gamma((n_i - k_i) as f64 + b_i) - ln_gamma(n_i as f64 + a_i + b_i);
