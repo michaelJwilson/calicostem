@@ -3,6 +3,7 @@ use ndarray::Array1;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayDyn, PyReadonlyArray1, PyReadonlyArrayDyn};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 
+// See https://itnext.io/how-to-bind-python-numpy-with-rust-ndarray-2efa5717ed21
 #[pymodule]
 fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
@@ -112,6 +113,7 @@ mod rust_fn {
         a: &ArrayView1<'_, f64>,
 	b: &ArrayView1<'_, f64>,
     ) {
+        //  See https://docs.rs/ndarray/latest/ndarray/struct.Zip.html#method.par_for_each
         Zip::from(r)
             .and(k)
             .and(n)
