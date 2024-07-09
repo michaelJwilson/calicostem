@@ -130,7 +130,19 @@ def test_rust_bb(mock_data, benchmark):
 
     assert np.allclose(sci_py_bb, rust_result)
 
+def test_rust_bbab(mock_data, benchmark):
+    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
+    ks = ks.astype(float)
+    ns = ns.astype(float)
 
+    def wrap_rust():
+        return core.bbab(ks, ns, aa, bb)
+
+    benchmark.group = "bb"
+    rust_result = benchmark(wrap_rust)
+
+    # TODO assert
+    
 def test_thread(mock_data, benchmark):
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 

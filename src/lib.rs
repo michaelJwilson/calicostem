@@ -55,6 +55,27 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    fn bbab<'py>(
+        py: Python<'py>,
+        ink: PyReadonlyArray1<f64>,
+        inn: PyReadonlyArray1<f64>,
+        ina: PyReadonlyArray1<f64>,
+        inb: PyReadonlyArray1<f64>,
+    ) -> &'py PyArray1<f64> {
+        let k = ink.as_array();
+        let n = inn.as_array();
+        let a = ina.as_array();
+        let b = inb.as_array();
+
+        let shape = k.shape();
+        let mut result = Array1::<f64>::zeros(shape[0]);
+        let mut vresult = result.view_mut();
+
+        rust_fn::bbab(&mut vresult, &k, &n, &a, &b);
+        result.into_pyarray(py)
+    }
+
+    #[pyfn(m)]
     fn double_and_random_perturbation(
         _py: Python<'_>,
         x: &PyArrayDyn<f64>,
@@ -124,7 +145,7 @@ mod rust_fn {
 
 		*r = lnfact(k32 + n32 - 1) - lnfact(n32 - 1) - lnfact(k32) + k * (1. - p).ln() + n * p.ln();		
 
-		//  *r = lngamma(k + n) - lngamma(k + 1.) - lngamma(n) + k * (1. - p).ln() + n * p.ln();
+		// *r = lngamma(k + n) - lngamma(k + 1.) - lngamma(n) + k * (1. - p).ln() + n * p.ln();
 
 		// let dist = NegativeBinomial::new(n, p).unwrap();
                 // *r = dist.ln_pmf(k as u64);
@@ -148,6 +169,25 @@ mod rust_fn {
             .par_for_each(|r, &k, &n, &a, &b| {
 		// https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
 		*r = -(n + 1.).ln() - lnbeta(n - k + 1., k + 1.) + lnbeta(k + a, n - k + b) - lnbeta(a, b)
+            });
+    }
+
+    pub fn bbab(
+        r: &mut ArrayViewMut1<'_, f64>,
+	k: &ArrayView1<'_, f64>,
+        n: &ArrayView1<'_, f64>,
+        a: &ArrayView1<'_, f64>,
+        b: &ArrayView1<'_, f64>,
+    ) {
+        //  See https://docs.rs/ndarray/latest/ndarray/struct.Zip.html#method.par_for_each
+        Zip::from(r)
+            .and(k)
+            .and(n)
+            .and(a)
+            .and(b)
+            .par_for_each(|r, &k, &n, &a, &b| {
+                // https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
+		*r = lnbeta(k + a, n - k + b) - lnbeta(a, b)
             });
     }
 
