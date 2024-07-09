@@ -1,80 +1,154 @@
-extern crate statrs;
-
-use numpy::{PyArrayDyn, PyReadonlyArray1};
-use pyo3::prelude::*;
-use rayon::prelude::*;
-use statrs::distribution::{Discrete, NegativeBinomial};
-use statrs::function::gamma::ln_gamma;
-
-// NB export RAYON_NUM_THREADS=12
-
-let batch_size = 1024;
-
-#[pyfunction]
-fn nb(
-    k: PyReadonlyArray1<'_, f64>,
-    n: PyReadonlyArray1<'_, f64>,
-    p: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
-
-    let k = k.to_vec()?;
-    let n = n.to_vec()?;
-    let p = p.to_vec()?;
-
-    let probs: Vec<f64> = n
-        .par_iter()
-        .zip(k.par_iter())
-        .zip(p.par_iter())
-        .map(|((&n_i, &k_i), &p_i)| {
-            let result = ln_gamma(k_i + n_i) - ln_gamma(k_i + 1.) - ln_gamma(n_i)
-                + k_i * (1. - p_i).ln()
-                + n_i * p_i.ln();
-            result
-        })
-        .collect();
-
-    Ok(probs)
-}
-
-#[pyfunction]
-fn bb(
-    k: PyReadonlyArray1<'_, f64>,
-    n: PyReadonlyArray1<'_, f64>,
-    a: PyReadonlyArray1<'_, f64>,
-    b: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
-
-    let k = k.to_vec()?;
-    let n = n.to_vec()?;
-    let a = a.to_vec()?;
-    let b = b.to_vec()?;
-
-    let probs: Vec<f64> = n
-        .par_iter()
-        .zip(k.par_iter())
-        .zip(a.par_iter())
-        .zip(b.par_iter())
-        .map(|(((&n_i, &k_i), &a_i), &b_i)| {
-            let result = ln_gamma(n_i + 1.)
-	        - ln_gamma(k_i + 1.)
-		- ln_gamma(n_i - k_i + 1.)
-                + ln_gamma(k_i + a_i)
-                + ln_gamma(n_i - k_i + b_i)
-                - ln_gamma(n_i + a_i + b_i)
-                + ln_gamma(a_i + b_i)
-                - ln_gamma(a_i)
-                - ln_gamma(b_i);
-            result
-        })
-        .collect();
-
-    Ok(probs)
-}
+use ndarray;
+use ndarray::Array1;
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayDyn, PyReadonlyArray1, PyReadonlyArrayDyn};
+use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 
 #[pymodule]
-#[pyo3(name = "core")]
 fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(nb, m)?)?;
-    m.add_function(wrap_pyfunction!(bb, m)?)?;
+    #[pyfn(m)]
+    fn max_min<'py>(py: Python<'py>, x: PyReadonlyArrayDyn<f64>) -> &'py PyArray1<f64> {
+        let array = x.as_array();
+        let result_array = rust_fn::max_min(&array);
+
+        result_array.into_pyarray(py)
+    }
+
+    #[pyfn(m)]
+    fn nb<'py>(
+        py: Python<'py>,
+        ink: PyReadonlyArray1<f64>,
+        inn: PyReadonlyArray1<f64>,
+        inp: PyReadonlyArray1<f64>,
+    ) -> &'py PyArray1<f64> {
+        let k = ink.as_array();
+        let n = inn.as_array();
+        let p = inp.as_array();
+
+        let shape = k.shape();
+        let mut result = Array1::<f64>::zeros(shape[0]);
+        let mut vresult = result.view_mut();
+
+        rust_fn::nb(&mut vresult, &k, &n, &p);
+        result.into_pyarray(py)
+    }
+
+    #[pyfn(m)]
+    fn bb<'py>(
+        py: Python<'py>,
+        ink: PyReadonlyArray1<f64>,
+        inn: PyReadonlyArray1<f64>,
+        ina: PyReadonlyArray1<f64>,
+	inb: PyReadonlyArray1<f64>,
+    ) -> &'py PyArray1<f64> {
+        let k = ink.as_array();
+        let n = inn.as_array();
+        let a = ina.as_array();
+	let b = inb.as_array();
+
+        let shape = k.shape();
+        let mut result = Array1::<f64>::zeros(shape[0]);
+        let mut vresult = result.view_mut();
+
+        rust_fn::bb(&mut vresult, &k, &n, &a, &b);
+        result.into_pyarray(py)
+    }
+
+    #[pyfn(m)]
+    fn double_and_random_perturbation(
+        _py: Python<'_>,
+        x: &PyArrayDyn<f64>,
+        perturbation_scaling: f64,
+    ) {
+        let mut array = unsafe { x.as_array_mut() };
+
+        rust_fn::double_and_random_perturbation(&mut array, perturbation_scaling);
+    }
+
+    #[pyfn(m)]
+    fn eye<'py>(py: Python<'py>, size: usize) -> &PyArray2<f64> {
+        let array = ndarray::Array::eye(size);
+
+        array.into_pyarray(py)
+    }
+
     Ok(())
+}
+
+mod rust_fn {
+    use ndarray::{arr1, Array1, Zip};
+    use numpy::ndarray::{ArrayView1, ArrayViewD, ArrayViewMut1, ArrayViewMutD};
+    use ordered_float::OrderedFloat;
+    use rand::Rng;
+    use statrs::function::gamma::ln_gamma;
+
+    pub fn double_and_random_perturbation(x: &mut ArrayViewMutD<'_, f64>, scaling: f64) {
+        let mut rng = rand::thread_rng();
+
+        x.iter_mut()
+            .for_each(|x| *x = *x * 2. + (rng.gen::<f64>() - 0.5) * scaling);
+    }
+
+    pub fn nb(
+        r: &mut ArrayViewMut1<'_, f64>,
+        k: &ArrayView1<'_, f64>,
+        n: &ArrayView1<'_, f64>,
+        p: &ArrayView1<'_, f64>,
+    ) {
+        Zip::from(r)
+            .and(k)
+            .and(n)
+            .and(p)
+            .par_for_each(|r, &k, &n, &p| {
+                *r = ln_gamma(k + n) - ln_gamma(k + 1.) - ln_gamma(n)
+                    + k * (1. - p).ln()
+                    + n * p.ln()
+            });
+    }
+
+    pub fn bb(
+        r: &mut ArrayViewMut1<'_, f64>,
+        k: &ArrayView1<'_, f64>,
+	n: &ArrayView1<'_, f64>,
+        a: &ArrayView1<'_, f64>,
+	b: &ArrayView1<'_, f64>,
+    ) {
+        Zip::from(r)
+            .and(k)
+            .and(n)
+            .and(a)
+	    .and(b)
+            .par_for_each(|r, &k, &n, &a, &b| {
+                *r = ln_gamma(n + 1.) - ln_gamma(k + 1.) - ln_gamma(n - k + 1.)
+                + ln_gamma(k + a)
+                + ln_gamma(n - k + b)
+                - ln_gamma(n + a + b)
+                + ln_gamma(a + b)
+                - ln_gamma(a)
+                - ln_gamma(b);
+            });
+    }
+
+    pub fn max_min(x: &ArrayViewD<'_, f64>) -> Array1<f64> {
+        if x.len() == 0 {
+            return arr1(&[]); // If the array has no elements, return empty array
+        }
+
+        let max_val = x
+            .iter()
+            .map(|a| OrderedFloat(*a))
+            .max()
+            .expect("Error calculating max value.")
+            .0;
+
+        let min_val = x
+            .iter()
+            .map(|a| OrderedFloat(*a))
+            .min()
+            .expect("Error calculating min value.")
+            .0;
+
+        let result_array = arr1(&[max_val, min_val]);
+
+        result_array
+    }
 }

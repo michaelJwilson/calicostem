@@ -5,7 +5,7 @@ import scipy
 import line_profiler
 from concurrent.futures import ThreadPoolExecutor
 
-NUM_THREADS = 4
+NUM_THREADS = 8
 
 def compute_nbinom_pmf_chunk(args):
     data_chunk, n, p = args
@@ -43,7 +43,7 @@ def thread_betabinom(k, n, a, b, num_threads=NUM_THREADS, executor=None):
     return np.concatenate(list(results))
 
 def get_mock_data():
-    NN = 100_000
+    NN = 1_000_000
     
     ns = 100 + np.arange(NN)
     ps = 0.5 * np.ones_like(ns)
@@ -136,7 +136,7 @@ def test_thread_bb(mock_data, benchmark):
     assert np.allclose(exp_bb, result)
     
 @line_profiler.profile
-def profile(ks, ns, ps, aa, bb, exp, exp_bb, iterations=10):
+def profile(ks, ns, ps, aa, bb, exp, exp_bb, iterations=100):
     ks = ks.astype(float)
     ns = ns.astype(float)
     
@@ -153,13 +153,18 @@ def profile(ks, ns, ps, aa, bb, exp, exp_bb, iterations=10):
 
     assert np.allclose(exp_bb, rust_bb)
 
-    # print(exp_bb[:5])
-    # print(rust_bb[:5])
+    print(exp[:5])
+    print(rust_result[:5])
+    
+    print(exp_bb[:5])
+    print(rust_bb[:5])
     
     print("Profiling complete.")
 
     
 if __name__ == "__main__":
     mock_data = get_mock_data()
+    ks, ns, ps, aa, bb, exp, exp_bb = mock_data
     
     profile(*mock_data)
+    
