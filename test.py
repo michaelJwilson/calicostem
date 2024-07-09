@@ -68,10 +68,10 @@ def get_mock_data():
     aa = np.ones_like(ns, dtype=float)
     bb = np.ones_like(ns, dtype=float)
 
-    exp = scipy.stats.nbinom.logpmf(ks, ns, ps)
-    exp_bb = scipy.stats.betabinom.logpmf(ks, ns, aa, bb)
+    sci_py = scipy.stats.nbinom.logpmf(ks, ns, ps)
+    sci_py_bb = scipy.stats.betabinom.logpmf(ks, ns, aa, bb)
 
-    return ks, ns, ps, aa, bb, exp, exp_bb
+    return ks, ns, ps, aa, bb, sci_py, sci_py_bb
 
 
 @pytest.fixture
@@ -79,32 +79,32 @@ def mock_data():
     return get_mock_data()
 
 
-def test_exp(mock_data, benchmark):
-    ks, ns, ps, aa, bb, exp, exp_bb = mock_data
+def test_sci_py(mock_data, benchmark):
+    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
-    def wrap_exp():
+    def wrap_sci_py():
         return scipy.stats.nbinom.logpmf(ks, ns, ps)
 
     benchmark.group = "nb"
-    result = benchmark(wrap_exp)
+    result = benchmark(wrap_sci_py)
 
-    assert np.allclose(exp, result)
+    assert np.allclose(sci_py, result)
 
 
-def test_exp_bb(mock_data, benchmark):
-    ks, ns, ps, aa, bb, exp, exp_bb = mock_data
+def test_sci_py_bb(mock_data, benchmark):
+    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
-    def wrap_exp():
+    def wrap_sci_py():
         return scipy.stats.betabinom.logpmf(ks, ns, aa, bb)
 
     benchmark.group = "bb"
-    result = benchmark(wrap_exp)
+    result = benchmark(wrap_sci_py)
 
-    assert np.allclose(exp_bb, result)
+    assert np.allclose(sci_py_bb, result)
 
 
 def test_rust(mock_data, benchmark):
-    ks, ns, ps, aa, bb, exp, exp_bb = mock_data
+    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
     ks = ks.astype(float)
     ns = ns.astype(float)
 
@@ -114,11 +114,11 @@ def test_rust(mock_data, benchmark):
     benchmark.group = "nb"
     rust_result = benchmark(wrap_rust)
 
-    assert np.allclose(exp, rust_result)
+    assert np.allclose(sci_py, rust_result)
 
 
 def test_rust_bb(mock_data, benchmark):
-    ks, ns, ps, aa, bb, exp, exp_bb = mock_data
+    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
     ks = ks.astype(float)
     ns = ns.astype(float)
 
@@ -128,11 +128,11 @@ def test_rust_bb(mock_data, benchmark):
     benchmark.group = "bb"
     rust_result = benchmark(wrap_rust)
 
-    assert np.allclose(exp_bb, rust_result)
+    assert np.allclose(sci_py_bb, rust_result)
 
 
 def test_thread(mock_data, benchmark):
-    ks, ns, ps, aa, bb, exp, exp_bb = mock_data
+    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
     executor = ThreadPoolExecutor(max_workers=NUM_THREADS)
 
@@ -142,11 +142,11 @@ def test_thread(mock_data, benchmark):
     benchmark.group = "nb"
     thread_result = benchmark(wrap_thread)
 
-    assert np.allclose(exp, thread_result)
+    assert np.allclose(sci_py, thread_result)
 
 
 def test_thread_bb(mock_data, benchmark):
-    ks, ns, ps, aa, bb, exp, exp_bb = mock_data
+    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
     executor = ThreadPoolExecutor(max_workers=NUM_THREADS)
 
@@ -156,31 +156,31 @@ def test_thread_bb(mock_data, benchmark):
     benchmark.group = "bb"
     result = benchmark(wrap_thread)
 
-    assert np.allclose(exp_bb, result)
+    assert np.allclose(sci_py_bb, result)
 
 
 @line_profiler.profile
-def profile(ks, ns, ps, aa, bb, exp, exp_bb, iterations=100):
+def profile(ks, ns, ps, aa, bb, sci_py, sci_py_bb, iterations=100):
     ks = ks.astype(float)
     ns = ns.astype(float)
 
     for _ in range(iterations):
-        exp = scipy.stats.nbinom.logpmf(ks, ns, ps)
+        sci_py = scipy.stats.nbinom.logpmf(ks, ns, ps)
         rust_result = core.nb(ks, ns, ps)
         thread_result = thread_nbinom(ks, ns, ps)
 
-        exp_bb = scipy.stats.betabinom.logpmf(ks, ns, aa, bb)
+        sci_py_bb = scipy.stats.betabinom.logpmf(ks, ns, aa, bb)
         rust_bb = core.bb(ks, ns, aa, bb)
 
-    assert np.allclose(exp, thread_result)
-    assert np.allclose(exp, rust_result)
+    assert np.allclose(sci_py, thread_result)
+    assert np.allclose(sci_py, rust_result)
 
-    assert np.allclose(exp_bb, rust_bb)
+    assert np.allclose(sci_py_bb, rust_bb)
 
-    print(exp[:5])
+    print(sci_py[:5])
     print(rust_result[:5])
 
-    print(exp_bb[:5])
+    print(sci_py_bb[:5])
     print(rust_bb[:5])
 
     print("Profiling complete.")
@@ -188,6 +188,6 @@ def profile(ks, ns, ps, aa, bb, exp, exp_bb, iterations=100):
 
 if __name__ == "__main__":
     mock_data = get_mock_data()
-    ks, ns, ps, aa, bb, exp, exp_bb = mock_data
+    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
     profile(*mock_data)
