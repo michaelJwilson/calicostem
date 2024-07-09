@@ -81,6 +81,11 @@ mod rust_fn {
     use ordered_float::OrderedFloat;
     use rand::Rng;
     use statrs::function::gamma::ln_gamma;
+    use statrs::function::beta::ln_beta;
+    use statrs::distribution::{NegativeBinomial, Discrete};
+    use rgsl::gamma_beta::factorials::{lnchoose, lnfact};
+    use rgsl::gamma_beta::gamma::lngamma;
+    use rgsl::gamma_beta::beta::lnbeta;
 
     pub fn double_and_random_perturbation(x: &mut ArrayViewMutD<'_, f64>, scaling: f64) {
         let mut rng = rand::thread_rng();
@@ -100,9 +105,25 @@ mod rust_fn {
             .and(n)
             .and(p)
             .par_for_each(|r, &k, &n, &p| {
-                *r = ln_gamma(k + n) - ln_gamma(k + 1.) - ln_gamma(n)
+	        // let dist = NegativeBinomial::new(n, p).unwrap();
+		// *r = dist.ln_pmf(k as u64);
+
+		/*
+		See:
+		  https://docs.rs/GSL/latest/rgsl/gamma_beta/factorials/fn.lnchoose.html
+		  https://mathworld.wolfram.com/NegativeBinomialDistribution.html
+		  https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.nbinom.html
+		*/
+		
+		let n32 = n as u32;
+		let k32 = k as u32;
+
+		*r = lnfact(k32 + n32 - 1) - lnfact(n32 - 1) - lnfact(k32) + k * (1. - p).ln() + n * p.ln();
+		/*
+                *r = lngamma(k + n) - lngamma(k + 1.) - lngamma(n)
                     + k * (1. - p).ln()
-                    + n * p.ln()
+                    + n * p.ln();
+		*/
             });
     }
 
@@ -120,13 +141,8 @@ mod rust_fn {
             .and(a)
 	    .and(b)
             .par_for_each(|r, &k, &n, &a, &b| {
-                *r = ln_gamma(n + 1.) - ln_gamma(k + 1.) - ln_gamma(n - k + 1.)
-                + ln_gamma(k + a)
-                + ln_gamma(n - k + b)
-                - ln_gamma(n + a + b)
-                + ln_gamma(a + b)
-                - ln_gamma(a)
-                - ln_gamma(b);
+		// https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
+		*r = -(n + 1.).ln() - lnbeta(n - k + 1., k + 1.) + lnbeta(k + a, n - k + b) - lnbeta(a, b)
             });
     }
 
