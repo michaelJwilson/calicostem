@@ -100,14 +100,18 @@ mod rust_fn {
         n: &ArrayView1<'_, f64>,
         p: &ArrayView1<'_, f64>,
     ) {
+    /*
+    See:
+        https://docs.rs/GSL/latest/rgsl/gamma_beta/factorials/fn.lnchoose.html
+        https://mathworld.wolfram.com/NegativeBinomialDistribution.html
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.nbinom.html
+    */
+
         Zip::from(r)
             .and(k)
             .and(n)
             .and(p)
             .par_for_each(|r, &k, &n, &p| {
-	        // let dist = NegativeBinomial::new(n, p).unwrap();
-		// *r = dist.ln_pmf(k as u64);
-
 		/*
 		See:
 		  https://docs.rs/GSL/latest/rgsl/gamma_beta/factorials/fn.lnchoose.html
@@ -118,12 +122,13 @@ mod rust_fn {
 		let n32 = n as u32;
 		let k32 = k as u32;
 
-		*r = lnfact(k32 + n32 - 1) - lnfact(n32 - 1) - lnfact(k32) + k * (1. - p).ln() + n * p.ln();
-		/*
-                *r = lngamma(k + n) - lngamma(k + 1.) - lngamma(n)
-                    + k * (1. - p).ln()
-                    + n * p.ln();
-		*/
+		*r = lnfact(k32 + n32 - 1) - lnfact(n32 - 1) - lnfact(k32) + k * (1. - p).ln() + n * p.ln();		
+
+		//  *r = lngamma(k + n) - lngamma(k + 1.) - lngamma(n) + k * (1. - p).ln() + n * p.ln();
+
+		// let dist = NegativeBinomial::new(n, p).unwrap();
+                // *r = dist.ln_pmf(k as u64);
+
             });
     }
 
