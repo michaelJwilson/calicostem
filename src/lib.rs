@@ -270,15 +270,24 @@ mod rust_fn {
 
         for i in 0..n_states {
             for j in 0..n_obs {
+                let mu = log_mu[[i, j]].exp();
+                let alpha = alphas[[i, j]];
+
                 for k in 0..n_spots {
+                    let base = base_nb_mean[[j, k]];
+
+                    if base == 0. {
+                        continue;
+                    }
+
                     let x = X[[j, k]];
-                    let shift = base_nb_mean[[j, k]] * (1. - tumor_prop[[j, k]]);
+                    let shift = base * (1. - tumor_prop[[j, k]]);
 
-                    let mu = shift + base_nb_mean[[j, k]] * tumor_prop[[j, k]] * log_mu[[i, j]].exp();
-                    let var = mu + alphas[[i, j]] * mu.powf(2.);
+                    let mean = shift + base * tumor_prop[[j, k]] * mu;
+                    let var = mean + alpha * mean.powf(2.);
 
-                    let p = mu / var;
-                    let n = mu * p / (1. - p);
+                    let p = mean / var;
+                    let n = mean * p / (1. - p);
 
                     let n32 = n as u32;
                     let x32 = x as u32;

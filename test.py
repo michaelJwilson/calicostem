@@ -151,9 +151,7 @@ def test_rust_moments(mock_data, benchmark):
 
 
 def test_rust_compute_emission_probability_nb_betabinom_mix(benchmark):
-    n_state = 3
-    n_obs = 10
-    n_spots = 25
+    n_state, n_obs, n_spots = 3, 10, 25
 
     X = np.random.uniform(low=1.0, high=10.0, size=(n_obs, n_spots))
     base_nb_mean = np.random.uniform(low=1.0, high=10.0, size=(n_obs, n_spots))
@@ -173,8 +171,7 @@ def test_rust_compute_emission_probability_nb_betabinom_mix(benchmark):
     # benchmark.group = "compute_emission_probability_nb_betabinom_mix"
     # result = benchmark(wrap_rust)
     
-    result = wrap_rust()
-    
+    result = wrap_rust()    
     print(result)
 
 def test_rust_bb(mock_data, benchmark):
