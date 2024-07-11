@@ -91,6 +91,24 @@ def test_sci_py(mock_data, benchmark):
     assert np.allclose(sci_py, result)
 
 
+def test_sci_py_moments(mock_data, benchmark):
+    NN = 100
+
+    mus = np.random.uniform(low=1.0, high=100.0, size=(NN, NN, NN))
+    var = 2.0 * mus
+
+    ks = np.random.randint(low=1, high=100, size=(NN, NN, NN)).astype(float)
+
+    def wrap_sci_py():
+        ps = mus / var
+        ns = mus * ps / (1.0 - ps)
+
+        return scipy.stats.nbinom.logpmf(ks, ns, ps)
+
+    benchmark.group = "nb_moments"
+    result = benchmark(wrap_sci_py)
+
+
 def test_sci_py_bb(mock_data, benchmark):
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
@@ -117,6 +135,48 @@ def test_rust(mock_data, benchmark):
     assert np.allclose(sci_py, rust_result)
 
 
+def test_rust_moments(mock_data, benchmark):
+    NN = 100
+
+    mus = np.random.uniform(low=1.0, high=100.0, size=(NN, NN, NN))
+    var = 2.0 * mus
+
+    ks = np.random.randint(low=1, high=100, size=(NN, NN, NN)).astype(float)
+
+    def wrap_rust():
+        return core.nb_moments(ks, mus, var)
+
+    benchmark.group = "nb_moments"
+    rust_result = benchmark(wrap_rust)
+
+
+def test_rust_compute_emission_probability_nb_betabinom_mix(benchmark):
+    n_state = 3
+    n_obs = 10
+    n_spots = 25
+
+    X = np.random.uniform(low=1.0, high=10.0, size=(n_obs, n_spots))
+    base_nb_mean = np.random.uniform(low=1.0, high=10.0, size=(n_obs, n_spots))
+    tumor_prop = np.random.uniform(low=0.0, high=1.0, size=(n_obs, n_spots))
+    log_mu = np.random.uniform(low=-2.0, high=0.0, size=(n_state, n_spots))
+    alphas = np.random.uniform(low=0.0, high=1.0, size=(n_state, n_spots))
+
+    def wrap_rust():
+        return core.compute_emission_probability_nb_betabinom_mix(
+            X,
+            base_nb_mean,
+            tumor_prop,
+            log_mu,
+            alphas,
+        )
+
+    # benchmark.group = "compute_emission_probability_nb_betabinom_mix"
+    # result = benchmark(wrap_rust)
+    
+    result = wrap_rust()
+    
+    print(result)
+
 def test_rust_bb(mock_data, benchmark):
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
     ks = ks.astype(float)
@@ -130,6 +190,7 @@ def test_rust_bb(mock_data, benchmark):
 
     assert np.allclose(sci_py_bb, rust_result)
 
+
 def test_rust_bbab(mock_data, benchmark):
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
     ks = ks.astype(float)
@@ -142,7 +203,8 @@ def test_rust_bbab(mock_data, benchmark):
     rust_result = benchmark(wrap_rust)
 
     # TODO assert
-    
+
+
 def test_thread(mock_data, benchmark):
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
