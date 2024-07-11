@@ -56,7 +56,7 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn compute_emission_probability_nb_betabinom_mix<'py>(
+    fn compute_emission_probability_nb_mix<'py>(
         py: Python<'py>,
         X: PyReadonlyArray2<f64>,
         base_nb_mean: PyReadonlyArray2<f64>,
@@ -76,7 +76,7 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
         let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
         let mut view_result = result.view_mut();
-        
+
         rust_fn::compute_emission_probability_nb_betabinom_mix(
             &mut view_result,
             &X,
@@ -153,6 +153,9 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 }
 
 mod rust_fn {
+    extern crate rayon;
+    use rayon::prelude::*;
+
     use ndarray::{arr1, Array1, Array2, Array3, Zip};
     use numpy::ndarray::{
         ArrayView1, ArrayView2, ArrayView3, ArrayViewD, ArrayViewMut1, ArrayViewMut2,
@@ -268,35 +271,45 @@ mod rust_fn {
         let n_spots = X.shape()[1];
         let n_states = log_mu.shape()[0];
 
-        for i in 0..n_states {
-            for j in 0..n_obs {
-                let mu = log_mu[[i, j]].exp();
-                let alpha = alphas[[i, j]];
+        // (0..n_obs).into_par_iter().for_each(|segment| {
+        for segment in 0..n_obs {
+            for spot in 0..n_spots {
+                let base = base_nb_mean[[segment, spot]];
 
-                for k in 0..n_spots {
-                    let base = base_nb_mean[[j, k]];
+                if base > 0. {
+                    let shift = base * (1. - tumor_prop[[segment, spot]]);
+                    let x = X[[segment, spot]];
 
-                    if base == 0. {
-                        continue;
+                    let lnGx = ln_gamma(x + 1.0);
+
+                    for state in 0..n_states {
+                        let mu = log_mu[[state, spot]].exp();
+
+                        let mean = shift + (mu * base * tumor_prop[[segment, spot]]);
+                        let var = mean + alphas[[state, spot]] * mean.powf(2.);
+
+                        let p = mean / var;
+
+                        if p.is_nan() {
+                            r[[state, segment, spot]] = std::f64::NAN;
+                            continue;
+                        }
+
+                        let n = mean * p / (1. - p);
+
+                        /*
+                        if (n > 0.) && (x + n > 0.) {
+                            r[[state, segment, spot]] =
+                                lngamma(x + n) - lngamma(n) - lnfact(x as u32)
+                                    + x * (1. - p).ln()
+                                    + n * p.ln();
+                        } else {
+                            r[[state, segment, spot]] = std::f64::NAN;
+                        }
+                        */
+
+                        r[[state, segment, spot]] = ln_gamma(n + x) - ln_gamma(n) - lnGx + (n * p.ln()) + (x * (-p).ln_1p());
                     }
-
-                    let x = X[[j, k]];
-                    let shift = base * (1. - tumor_prop[[j, k]]);
-
-                    let mean = shift + base * tumor_prop[[j, k]] * mu;
-                    let var = mean + alpha * mean.powf(2.);
-
-                    let p = mean / var;
-                    let n = mean * p / (1. - p);
-
-                    let n32 = n as u32;
-                    let x32 = x as u32;
-
-                    // println!("x: {}, mu: {}, var: {}, p: {}, n: {}", x, mu, var, p, n);
-
-                    r[[i, j, k]] = lnfact(x32 + n32 - 1) - lnfact(n32 - 1) - lnfact(x32)
-                        + x * (1. - p).ln()
-                        + n * p.ln();
                 }
             }
         }
