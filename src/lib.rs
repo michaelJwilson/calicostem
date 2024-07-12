@@ -90,6 +90,43 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    fn compute_emission_probability_bb_mix<'py>(
+        py: Python<'py>,
+        X: PyReadonlyArray2<f64>,
+        base_nb_mean: PyReadonlyArray2<f64>,
+        total_bb_RD: PyReadonlyArray2<f64>,
+        pbinom: PyReadonlyArray2<f64>,
+        taus: PyReadonlyArray2<f64>,
+        tumor_prop: PyReadonlyArray2<f64>,
+    ) -> &'py PyArray3<f64> {
+        let X = X.as_array();
+        let base_nb_mean = base_nb_mean.as_array();
+        let total_bb_RD = total_bb_RD.as_array();
+        let pbinom = pbinom.as_array();
+        let taus = taus.as_array();
+        let tumor_prop = tumor_prop.as_array();
+
+        let n_obs = X.shape()[0];
+        let n_spots = X.shape()[1];
+        let n_states = pbinom.shape()[0];
+
+        let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
+        let mut view_result = result.view_mut();
+
+        rust_fn::compute_emission_probability_bb_betabinom_mix(
+            &mut view_result,
+            &X,
+            &base_nb_mean,
+            &total_bb_RD,
+            &pbinom,
+            &taus,
+            &tumor_prop,
+        );
+
+        result.into_pyarray(py)
+    }
+
+    #[pyfn(m)]
     fn bb<'py>(
         py: Python<'py>,
         ink: PyReadonlyArray1<f64>,
@@ -275,20 +312,20 @@ mod rust_fn {
             for spot in 0..n_spots {
                 let base = base_nb_mean[[segment, spot]];
 
-		if tumor_prop[[segment, spot]].is_nan() {
-		    for state in 0..n_states { 
-		        r[[state, segment, spot]] = std::f64::NAN;
-	            }
-		    
+                if tumor_prop[[segment, spot]].is_nan() {
+                    for state in 0..n_states {
+                        r[[state, segment, spot]] = std::f64::NAN;
+                    }
+
                     continue;
-		}
+                }
 
                 if base > 0. {
                     let shift = base * (1. - tumor_prop[[segment, spot]]);
                     let x = X[[segment, spot]];
 
-		    // ln_gamma(x + 1.0)
-		    let lnGx = lnfact(x as u32);
+                    // ln_gamma(x + 1.0)
+                    let lnGx = lnfact(x as u32);
 
                     for state in 0..n_states {
                         let mu = log_mu[[state, spot]].exp();
@@ -299,18 +336,57 @@ mod rust_fn {
                         let p = mean / var;
                         let n = mean * p / (1. - p);
 
-                        /*
-                        if (n > 0.) && (x + n > 0.) {
-                            r[[state, segment, spot]] =
-                                lngamma(x + n) - lngamma(n) - lnfact(x as u32)
-                                    + x * (1. - p).ln()
-                                    + n * p.ln();
-                        } else {
-                            r[[state, segment, spot]] = std::f64::NAN;
-                        }
-                        */
+                        r[[state, segment, spot]] = ln_gamma(n + x) - ln_gamma(n) - lnGx
+                            + (n * p.ln())
+                            + (x * (-p).ln_1p());
+                    }
+                }
+            }
+        }
+    }
 
-                        r[[state, segment, spot]] = ln_gamma(n + x) - ln_gamma(n) - lnGx + (n * p.ln()) + (x * (-p).ln_1p());
+    pub fn compute_emission_probability_bb_betabinom_mix(
+        r: &mut ArrayViewMut3<'_, f64>,
+        X: &ArrayView2<'_, f64>,
+        base_nb_mean: &ArrayView2<'_, f64>,
+        total_bb_RD: &ArrayView2<'_, f64>,
+        pbinom: &ArrayView2<'_, f64>,
+        taus: &ArrayView2<'_, f64>,
+        tumor_prop: &ArrayView2<'_, f64>,
+    ) {
+        let n_obs = X.shape()[0];
+        let n_spots = X.shape()[1];
+        let n_states = pbinom.shape()[0];
+
+        for segment in 0..n_obs {
+            for spot in 0..n_spots {
+                if tumor_prop[[segment, spot]].is_nan() {
+                    for state in 0..n_states {
+                        r[[state, segment, spot]] = std::f64::NAN;
+                    }
+
+                    continue;
+                }
+
+                let rd = total_bb_RD[[segment, spot]];
+
+                if rd > 0. {
+                    let kk = X[[segment, spot]];
+                    let nn = total_bb_RD[[segment, spot]];
+
+                    term_logn = -(nn + 1.).ln();
+                    term_beta = -lnbeta(nn - kk + 1., kk + 1.);
+
+                    for state in 0..n_states {
+                        let tau = taus[[state, spot]];
+
+                        let mix_pa = pbinom[[state, spot]] * tumor_prop[[segment, spot]] + 0.5 * (1. - tumor_prop[[segment, spot]]);
+                        let mix_pb = (1. - pbinom[[state, spot]]) * tumor_prop[[segment, spot]] + 0.5 * (1. - tumor_prop[[segment, spot]]);
+    
+                        let aa = mix_pa * tau;
+                        let bb = mix_pb * tau;
+
+                        r[[state, segment, spot]] = term_logn + term_beta + lnbeta(kk + aa, nn - kk + bb) - lnbeta(aa, bb);
                     }
                 }
             }
