@@ -271,7 +271,6 @@ mod rust_fn {
         let n_spots = X.shape()[1];
         let n_states = log_mu.shape()[0];
 
-        // (0..n_obs).into_par_iter().for_each(|segment| {
         for segment in 0..n_obs {
             for spot in 0..n_spots {
                 let base = base_nb_mean[[segment, spot]];
