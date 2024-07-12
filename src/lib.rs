@@ -1,5 +1,5 @@
 use ndarray;
-use ndarray::{Array1, Array2, Array3};
+use ndarray::{Array, Array1, Array2, Array3};
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayDyn, PyReadonlyArray1, PyReadonlyArray2,
     PyReadonlyArray3, PyReadonlyArrayDyn,
@@ -87,17 +87,22 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let n_spots = X.shape()[1];
         let n_states = log_mu.shape()[0];
 
-        let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
-        let mut view_result = result.view_mut();
+        // let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
+        // let mut view_result = result.view_mut();
 
+        let mut interim = vec![0.0; n_states * n_obs * n_spots];
+        
         rust_fn::compute_emission_probability_nb(
-            &mut view_result,
+            &mut interim,
             &X,
             &base_nb_mean,
             &tumor_prop,
             &log_mu,
             &alphas,
         );
+
+        let shape = (n_states, n_obs, n_spots);
+        let result = Array::from_shape_vec(shape, interim).unwrap();
 
         result.into_pyarray(py)
     }
@@ -282,7 +287,7 @@ mod rust_fn {
     }
 
     pub fn compute_emission_probability_nb(
-        r: &mut ArrayViewMut3<'_, f64>,
+        r: &mut Vec<f64>,
         X: &ArrayView2<'_, f64>,
         base_nb_mean: &ArrayView2<'_, f64>,
         tumor_prop: &ArrayView2<'_, f64>,
@@ -300,13 +305,23 @@ mod rust_fn {
         let n_spots = X.shape()[1];
         let n_states = log_mu.shape()[0];
 
+        /*
+        let chunks: Vec<(usize, &mut [f64])> = r
+        .chunks_mut(n_states)
+        .enumerate()
+        .collect();
+
+        chunks.into_par_iter()
+        .for_each(|(chunk_idx, chunk)| {
+        });
+        */
+        
         for segment in 0..n_obs {
             for spot in 0..n_spots {
-                let base = base_nb_mean[[segment, spot]];
-
                 if tumor_prop[[segment, spot]].is_nan() {
                     for state in 0..n_states {
-                        r[[state, segment, spot]] = std::f64::NAN;
+                        idx = state * n_obs + segment * n_spots + spot;
+                        r[idx] = std::f64::NAN;
                     }
 
                     continue;
@@ -328,13 +343,16 @@ mod rust_fn {
                         let p = mean / var;
                         let n = mean * p / (1. - p);
 
-                        r[[state, segment, spot]] = ln_gamma(n + x) - ln_gamma(n) - lnGx
+                        idx = state * n_obs + segment * n_spots + spot;
+
+                        r[idx] = ln_gamma(n + x) - ln_gamma(n) - lnGx
                             + (n * p.ln())
                             + (x * (-p).ln_1p());
                     }
                 }
             }
         }
+        */
     }
 
     pub fn compute_emission_probability_bb_mix(
