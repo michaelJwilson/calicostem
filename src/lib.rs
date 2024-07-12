@@ -77,6 +77,7 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         log_mu: PyReadonlyArray2<f64>,
         alphas: PyReadonlyArray2<f64>,
     ) -> &'py PyArray3<f64> {
+
         let X = X.as_array();
         let base_nb_mean = base_nb_mean.as_array();
         let tumor_prop = tumor_prop.as_array();
@@ -305,54 +306,48 @@ mod rust_fn {
         let n_spots = X.shape()[1];
         let n_states = log_mu.shape()[0];
 
-        /*
-        let chunks: Vec<(usize, &mut [f64])> = r
-        .chunks_mut(n_states)
+        let state_chunks: Vec<(usize, &mut [f64])> = r
+        .chunks_mut(n_obs * n_spots)
         .enumerate()
         .collect();
 
-        chunks.into_par_iter()
-        .for_each(|(chunk_idx, chunk)| {
-        });
-        */
-        
-        for segment in 0..n_obs {
-            for spot in 0..n_spots {
-                if tumor_prop[[segment, spot]].is_nan() {
-                    for state in 0..n_states {
-                        idx = state * n_obs + segment * n_spots + spot;
-                        r[idx] = std::f64::NAN;
+        // println!("{}", state_chunks.len());
+
+        state_chunks.into_par_iter()
+        .for_each(|(state, state_chunk)| {
+            for segment in 0..n_obs {
+                for spot in 0..n_spots {
+                    let idx = segment * n_spots + spot;
+
+                    if tumor_prop[[segment, spot]].is_nan() {
+                        state_chunk[idx] = std::f64::NAN;
+
+                        continue;
                     }
 
-                    continue;
-                }
+                    let base = base_nb_mean[[segment, spot]];
 
-                if base > 0. {
-                    let shift = base * (1. - tumor_prop[[segment, spot]]);
-                    let x = X[[segment, spot]];
-
-                    // ln_gamma(x + 1.0)
-                    let lnGx = lnfact(x as u32);
-
-                    for state in 0..n_states {
+                    if base > 0. {
+                        let shift = base * (1. - tumor_prop[[segment, spot]]);
+                        let x = X[[segment, spot]];
+    
+                        // ln_gamma(x + 1.0)
+                        let lnGx = lnfact(x as u32);
                         let mu = log_mu[[state, spot]].exp();
-
+    
                         let mean = shift + (mu * base * tumor_prop[[segment, spot]]);
                         let var = mean + alphas[[state, spot]] * mean.powf(2.);
-
+    
                         let p = mean / var;
                         let n = mean * p / (1. - p);
-
-                        idx = state * n_obs + segment * n_spots + spot;
-
-                        r[idx] = ln_gamma(n + x) - ln_gamma(n) - lnGx
-                            + (n * p.ln())
-                            + (x * (-p).ln_1p());
+        
+                        state_chunk[idx] = ln_gamma(n + x) - ln_gamma(n) - lnGx
+                                + (n * p.ln())
+                                + (x * (-p).ln_1p());
                     }
                 }
             }
-        }
-        */
+        });
     }
 
     pub fn compute_emission_probability_bb_mix(
