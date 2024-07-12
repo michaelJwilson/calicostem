@@ -359,7 +359,6 @@ mod rust_fn {
         });
     }
 
-    // r: &mut ArrayViewMut3<'_, f64>,
     pub fn compute_emission_probability_bb_mix(
         r: &mut Vec<f64>,
         X: &ArrayView2<'_, f64>,
@@ -424,7 +423,6 @@ mod rust_fn {
             .collect()
     }
 
-    // r: &mut ArrayViewMut3<'_, f64>,
     pub fn compute_emission_probability_bb_mix_weighted(
         r: &mut Vec<f64>,
         X: &ArrayView2<'_, f64>,
@@ -442,8 +440,6 @@ mod rust_fn {
         let n_states = pbinom.shape()[0];
 
         let segment_chunks = get_segment_chunks(sample_lengths);
-
-        // println!("Length of segment chunks: {}, n_obs: {}", segment_chunks.len(), n_obs);
 
         let state_chunks: Vec<(usize, &mut [f64])> = r
         .chunks_mut(n_obs * n_spots)
