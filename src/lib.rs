@@ -127,6 +127,52 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    fn compute_emission_probability_bb_mix_weighted<'py>(
+        py: Python<'py>,
+        X: PyReadonlyArray2<f64>,
+        base_nb_mean: PyReadonlyArray2<f64>,
+        total_bb_RD: PyReadonlyArray2<f64>,
+        pbinom: PyReadonlyArray2<f64>,
+        taus: PyReadonlyArray2<f64>,
+        tumor_prop: PyReadonlyArray2<f64>,
+        sample_lengths: PyReadonlyArray1<f64>,
+        log_mu: PyReadonlyArray2<f64>,
+        log_mu_shift: PyReadonlyArray2<f64>,
+    ) -> &'py PyArray3<f64> {
+        let X = X.as_array();
+        let base_nb_mean = base_nb_mean.as_array();
+        let total_bb_RD = total_bb_RD.as_array();
+        let pbinom = pbinom.as_array();
+        let taus = taus.as_array();
+        let tumor_prop = tumor_prop.as_array();
+        let sample_lengths = sample_lengths.as_array();
+        let log_mu = log_mu.as_array();
+        let log_mu_shift = log_mu_shift.as_array();
+
+        let n_obs = X.shape()[0];
+        let n_spots = X.shape()[1];
+        let n_states = pbinom.shape()[0];
+
+        let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
+        let mut view_result = result.view_mut();
+
+        rust_fn::compute_emission_probability_bb_betabinom_mix_weighted(
+            &mut view_result,
+            &X,
+            &base_nb_mean,
+            &total_bb_RD,
+            &pbinom,
+            &taus,
+            &tumor_prop,
+            &sample_lengths,
+            &log_mu,
+            &log_mu_shift,
+        );
+
+        result.into_pyarray(py)
+    }
+
+    #[pyfn(m)]
     fn bb<'py>(
         py: Python<'py>,
         ink: PyReadonlyArray1<f64>,
@@ -374,14 +420,90 @@ mod rust_fn {
                     let kk = X[[segment, spot]];
                     let nn = total_bb_RD[[segment, spot]];
 
-                    term_logn = -(nn + 1.).ln();
-                    term_beta = -lnbeta(nn - kk + 1., kk + 1.);
+                    let term_logn = -(nn + 1.).ln();
+                    let term_beta = -lnbeta(nn - kk + 1., kk + 1.);
+
+                    let shift = 0.5 * (1. - tumor_prop[[segment, spot]]);
 
                     for state in 0..n_states {
                         let tau = taus[[state, spot]];
 
-                        let mix_pa = pbinom[[state, spot]] * tumor_prop[[segment, spot]] + 0.5 * (1. - tumor_prop[[segment, spot]]);
-                        let mix_pb = (1. - pbinom[[state, spot]]) * tumor_prop[[segment, spot]] + 0.5 * (1. - tumor_prop[[segment, spot]]);
+                        let mix_pa = pbinom[[state, spot]] * tumor_prop[[segment, spot]] + shift;
+                        let mix_pb = (1. - pbinom[[state, spot]]) * tumor_prop[[segment, spot]] + shift;
+    
+                        let aa = mix_pa * tau;
+                        let bb = mix_pb * tau;
+
+                        r[[state, segment, spot]] = term_logn + term_beta + lnbeta(kk + aa, nn - kk + bb) - lnbeta(aa, bb);
+                    }
+                }
+            }
+        }
+    }
+
+    fn get_segment_chunks(repeat_counts: &ArrayView1<'_, f64>) -> Vec<usize> {
+        repeat_counts
+            .iter()
+            .enumerate() // Get both the index and the value
+            .flat_map(|(index, &count)| {
+                std::iter::repeat(index) // Repeat the index
+                    .take(count.round() as usize) // Number of times to repeat, rounded to nearest whole number
+            })
+            .collect()
+    }
+
+    pub fn compute_emission_probability_bb_betabinom_mix_weighted(
+        r: &mut ArrayViewMut3<'_, f64>,
+        X: &ArrayView2<'_, f64>,
+        base_nb_mean: &ArrayView2<'_, f64>,
+        total_bb_RD: &ArrayView2<'_, f64>,
+        pbinom: &ArrayView2<'_, f64>,
+        taus: &ArrayView2<'_, f64>,
+        tumor_prop: &ArrayView2<'_, f64>,
+        sample_lengths: &ArrayView1<'_, f64>,
+        log_mu: &ArrayView2<'_, f64>,
+        log_mu_shift: &ArrayView2<'_, f64>,
+    ) {
+        let n_obs = X.shape()[0];
+        let n_spots = X.shape()[1];
+        let n_states = pbinom.shape()[0];
+
+        let segment_chunks = get_segment_chunks(sample_lengths);
+
+        assert segment_chunks.len() == n_obs;
+
+        for segment in 0..n_obs {
+            let segment_chunk = segment_chunks[segment];
+
+            for spot in 0..n_spots {
+                if tumor_prop[[segment, spot]].is_nan() {
+                    for state in 0..n_states {
+                        r[[state, segment, spot]] = std::f64::NAN;
+                    }
+
+                    continue;
+                }
+
+                let rd = total_bb_RD[[segment, spot]];
+
+                if rd > 0. {
+                    let kk = X[[segment, spot]];
+                    let nn = total_bb_RD[[segment, spot]];
+
+                    let term_logn = -(nn + 1.).ln();
+                    let term_beta = -lnbeta(nn - kk + 1., kk + 1.);
+
+                    let mu_norm = log_mu_shift[[segment_chunk, spot]].exp();
+
+                    for state in 0..n_states {
+                        let mu = log_mu[[state, spot]].exp();
+                        let tau = taus[[state, spot]];
+
+                        let weighted_tumor_prop = (tumor_prop[[segment, spot]] * mu) / (tumor_prop[[segment, spot]] * mu + 1. - tumor_prop[[segment, spot]]); 
+                        let shift = 0.5 * (1. - weighted_tumor_prop);
+
+                        let mix_pa = pbinom[[state, spot]] * weighted_tumor_prop + shift;
+                        let mix_pb = (1. - pbinom[[state, spot]]) * weighted_tumor_prop + shift;
     
                         let aa = mix_pa * tau;
                         let bb = mix_pb * tau;
@@ -410,25 +532,6 @@ mod rust_fn {
                 // https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
                 *r = -(n + 1.).ln() - lnbeta(n - k + 1., k + 1.) + lnbeta(k + a, n - k + b)
                     - lnbeta(a, b)
-            });
-    }
-
-    pub fn bbab(
-        r: &mut ArrayViewMut1<'_, f64>,
-        k: &ArrayView1<'_, f64>,
-        n: &ArrayView1<'_, f64>,
-        a: &ArrayView1<'_, f64>,
-        b: &ArrayView1<'_, f64>,
-    ) {
-        //  See https://docs.rs/ndarray/latest/ndarray/struct.Zip.html#method.par_for_each
-        Zip::from(r)
-            .and(k)
-            .and(n)
-            .and(a)
-            .and(b)
-            .par_for_each(|r, &k, &n, &a, &b| {
-                // https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
-                *r = lnbeta(k + a, n - k + b) - lnbeta(a, b)
             });
     }
 
