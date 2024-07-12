@@ -178,11 +178,14 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let n_spots = X.shape()[1];
         let n_states = pbinom.shape()[0];
 
-        let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
-        let mut view_result = result.view_mut();
+        // let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
+        // let mut view_result = result.view_mut();
 
+        let mut interim = vec![0.0; n_states * n_obs * n_spots];
+
+        // &mut view_result,
         rust_fn::compute_emission_probability_bb_mix_weighted(
-            &mut view_result,
+            &mut interim,
             &X,
             &base_nb_mean,
             &total_bb_RD,
@@ -193,6 +196,9 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             &log_mu,
             &log_mu_shift,
         );
+
+        let shape = (n_states, n_obs, n_spots);
+        let result = Array::from_shape_vec(shape, interim).unwrap();
 
         result.into_pyarray(py)
     }
@@ -418,8 +424,9 @@ mod rust_fn {
             .collect()
     }
 
+    // r: &mut ArrayViewMut3<'_, f64>,
     pub fn compute_emission_probability_bb_mix_weighted(
-        r: &mut ArrayViewMut3<'_, f64>,
+        r: &mut Vec<f64>,
         X: &ArrayView2<'_, f64>,
         base_nb_mean: &ArrayView2<'_, f64>,
         total_bb_RD: &ArrayView2<'_, f64>,
@@ -438,42 +445,48 @@ mod rust_fn {
 
         // println!("Length of segment chunks: {}, n_obs: {}", segment_chunks.len(), n_obs);
 
-        for segment in 0..n_obs {
-            for spot in 0..n_spots {
-                if tumor_prop[[segment, spot]].is_nan() {
-                    for state in 0..n_states {
-                        r[[state, segment, spot]] = std::f64::NAN;
+        let state_chunks: Vec<(usize, &mut [f64])> = r
+        .chunks_mut(n_obs * n_spots)
+        .enumerate()
+        .collect();
+
+        state_chunks.into_par_iter()
+        .for_each(|(state, state_chunk)| {
+            for segment in 0..n_obs {
+                for spot in 0..n_spots {
+                    let idx = segment * n_spots + spot;  
+
+                    if tumor_prop[[segment, spot]].is_nan() {              
+                        state_chunk[idx] = std::f64::NAN;
+                        continue;
                     }
-                    continue;
-                }
-                
-                if total_bb_RD[[segment, spot]] > 0. {
-                    let kk = X[[segment, spot]];
-                    let nn = total_bb_RD[[segment, spot]];
 
-                    let segment_chunk = segment_chunks[segment];
-
-                    let term_logn = -(nn + 1.).ln();
-                    let term_beta = -lnbeta(nn - kk + 1., kk + 1.);
-
-                    for state in 0..n_states {
+                    if total_bb_RD[[segment, spot]] > 0. {
+                        let kk = X[[segment, spot]];
+                        let nn = total_bb_RD[[segment, spot]];
+    
+                        let segment_chunk = segment_chunks[segment];
+    
+                        let term_logn = -(nn + 1.).ln();
+                        let term_beta = -lnbeta(nn - kk + 1., kk + 1.);
+    
                         let mu = (log_mu[[state, spot]] - log_mu_shift[[segment_chunk, spot]]).exp();
                         let tau = taus[[state, spot]];
-
+    
                         let weighted_tumor_prop = (tumor_prop[[segment, spot]] * mu) / (tumor_prop[[segment, spot]] * mu + 1. - tumor_prop[[segment, spot]]); 
                         let shift = 0.5 * (1. - weighted_tumor_prop);
-
+    
                         let mix_pa = pbinom[[state, spot]] * weighted_tumor_prop + shift;
                         let mix_pb = (1. - pbinom[[state, spot]]) * weighted_tumor_prop + shift;
-    
+        
                         let aa = mix_pa * tau;
                         let bb = mix_pb * tau;
-
-                        r[[state, segment, spot]] = term_logn + term_beta + lnbeta(kk + aa, nn - kk + bb) - lnbeta(aa, bb);
+    
+                        state_chunk[idx] = term_logn + term_beta + lnbeta(kk + aa, nn - kk + bb) - lnbeta(aa, bb);
                     }
                 }
             }
-        }
+        });
     }
 
     pub fn bb(
