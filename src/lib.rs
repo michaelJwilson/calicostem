@@ -194,27 +194,6 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn bbab<'py>(
-        py: Python<'py>,
-        ink: PyReadonlyArray1<f64>,
-        inn: PyReadonlyArray1<f64>,
-        ina: PyReadonlyArray1<f64>,
-        inb: PyReadonlyArray1<f64>,
-    ) -> &'py PyArray1<f64> {
-        let k = ink.as_array();
-        let n = inn.as_array();
-        let a = ina.as_array();
-        let b = inb.as_array();
-
-        let shape = k.shape();
-        let mut result = Array1::<f64>::zeros(shape[0]);
-        let mut vresult = result.view_mut();
-
-        rust_fn::bbab(&mut vresult, &k, &n, &a, &b);
-        result.into_pyarray(py)
-    }
-
-    #[pyfn(m)]
     fn double_and_random_perturbation(
         _py: Python<'_>,
         x: &PyArrayDyn<f64>,
@@ -470,33 +449,28 @@ mod rust_fn {
 
         let segment_chunks = get_segment_chunks(sample_lengths);
 
-        assert segment_chunks.len() == n_obs;
+        // println!("Length of segment chunks: {}, n_obs: {}", segment_chunks.len(), n_obs);
 
         for segment in 0..n_obs {
-            let segment_chunk = segment_chunks[segment];
-
             for spot in 0..n_spots {
                 if tumor_prop[[segment, spot]].is_nan() {
                     for state in 0..n_states {
                         r[[state, segment, spot]] = std::f64::NAN;
                     }
-
                     continue;
                 }
-
-                let rd = total_bb_RD[[segment, spot]];
-
-                if rd > 0. {
+                
+                if total_bb_RD[[segment, spot]] > 0. {
                     let kk = X[[segment, spot]];
                     let nn = total_bb_RD[[segment, spot]];
+
+                    let segment_chunk = segment_chunks[segment];
 
                     let term_logn = -(nn + 1.).ln();
                     let term_beta = -lnbeta(nn - kk + 1., kk + 1.);
 
-                    let mu_norm = log_mu_shift[[segment_chunk, spot]].exp();
-
                     for state in 0..n_states {
-                        let mu = log_mu[[state, spot]].exp();
+                        let mu = (log_mu[[state, spot]] - log_mu_shift[[segment_chunk, spot]]).exp();
                         let tau = taus[[state, spot]];
 
                         let weighted_tumor_prop = (tumor_prop[[segment, spot]] * mu) / (tumor_prop[[segment, spot]] * mu + 1. - tumor_prop[[segment, spot]]); 
