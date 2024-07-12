@@ -276,11 +276,20 @@ mod rust_fn {
             for spot in 0..n_spots {
                 let base = base_nb_mean[[segment, spot]];
 
+		if tumor_prop[[segment, spot]].is_nan() {
+		    for state in 0..n_states { 
+		        r[[state, segment, spot]] = std::f64::NAN;
+	            }
+		    
+                    continue;
+		}
+
                 if base > 0. {
                     let shift = base * (1. - tumor_prop[[segment, spot]]);
                     let x = X[[segment, spot]];
 
-                    let lnGx = ln_gamma(x + 1.0);
+		    // ln_gamma(x + 1.0)
+		    let lnGx = lnfact(x as u32);
 
                     for state in 0..n_states {
                         let mu = log_mu[[state, spot]].exp();
@@ -289,12 +298,6 @@ mod rust_fn {
                         let var = mean + alphas[[state, spot]] * mean.powf(2.);
 
                         let p = mean / var;
-
-                        if p.is_nan() {
-                            r[[state, segment, spot]] = std::f64::NAN;
-                            continue;
-                        }
-
                         let n = mean * p / (1. - p);
 
                         /*
