@@ -10,11 +10,24 @@ use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 #[pymodule]
 fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
-    fn max_min<'py>(py: Python<'py>, x: PyReadonlyArrayDyn<f64>) -> &'py PyArray1<f64> {
-        let array = x.as_array();
-        let result_array = rust_fn::max_min(&array);
+    fn bb<'py>(
+        py: Python<'py>,
+        ink: PyReadonlyArray1<f64>,
+        inn: PyReadonlyArray1<f64>,
+        ina: PyReadonlyArray1<f64>,
+        inb: PyReadonlyArray1<f64>,
+    ) -> &'py PyArray1<f64> {
+        let k = ink.as_array();
+        let n = inn.as_array();
+        let a = ina.as_array();
+        let b = inb.as_array();
 
-        result_array.into_pyarray(py)
+        let shape = k.shape();
+        let mut result = Array1::<f64>::zeros(shape[0]);
+        let mut vresult = result.view_mut();
+
+        rust_fn::bb(&mut vresult, &k, &n, &a, &b);
+        result.into_pyarray(py)
     }
 
     #[pyfn(m)]
@@ -56,7 +69,7 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfn(m)]
-    fn compute_emission_probability_nb_mix<'py>(
+    fn compute_emission_probability_nb<'py>(
         py: Python<'py>,
         X: PyReadonlyArray2<f64>,
         base_nb_mean: PyReadonlyArray2<f64>,
@@ -77,7 +90,7 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
         let mut view_result = result.view_mut();
 
-        rust_fn::compute_emission_probability_nb_betabinom_mix(
+        rust_fn::compute_emission_probability_nb(
             &mut view_result,
             &X,
             &base_nb_mean,
@@ -113,7 +126,7 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
         let mut view_result = result.view_mut();
 
-        rust_fn::compute_emission_probability_bb_betabinom_mix(
+        rust_fn::compute_emission_probability_bb_mix(
             &mut view_result,
             &X,
             &base_nb_mean,
@@ -156,7 +169,7 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
         let mut view_result = result.view_mut();
 
-        rust_fn::compute_emission_probability_bb_betabinom_mix_weighted(
+        rust_fn::compute_emission_probability_bb_mix_weighted(
             &mut view_result,
             &X,
             &base_nb_mean,
@@ -170,45 +183,6 @@ fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         );
 
         result.into_pyarray(py)
-    }
-
-    #[pyfn(m)]
-    fn bb<'py>(
-        py: Python<'py>,
-        ink: PyReadonlyArray1<f64>,
-        inn: PyReadonlyArray1<f64>,
-        ina: PyReadonlyArray1<f64>,
-        inb: PyReadonlyArray1<f64>,
-    ) -> &'py PyArray1<f64> {
-        let k = ink.as_array();
-        let n = inn.as_array();
-        let a = ina.as_array();
-        let b = inb.as_array();
-
-        let shape = k.shape();
-        let mut result = Array1::<f64>::zeros(shape[0]);
-        let mut vresult = result.view_mut();
-
-        rust_fn::bb(&mut vresult, &k, &n, &a, &b);
-        result.into_pyarray(py)
-    }
-
-    #[pyfn(m)]
-    fn double_and_random_perturbation(
-        _py: Python<'_>,
-        x: &PyArrayDyn<f64>,
-        perturbation_scaling: f64,
-    ) {
-        let mut array = unsafe { x.as_array_mut() };
-
-        rust_fn::double_and_random_perturbation(&mut array, perturbation_scaling);
-    }
-
-    #[pyfn(m)]
-    fn eye<'py>(py: Python<'py>, size: usize) -> &PyArray2<f64> {
-        let array = ndarray::Array::eye(size);
-
-        array.into_pyarray(py)
     }
 
     Ok(())
@@ -231,13 +205,6 @@ mod rust_fn {
     use statrs::distribution::{Discrete, NegativeBinomial};
     use statrs::function::beta::ln_beta;
     use statrs::function::gamma::ln_gamma;
-
-    pub fn double_and_random_perturbation(x: &mut ArrayViewMutD<'_, f64>, scaling: f64) {
-        let mut rng = rand::thread_rng();
-
-        x.iter_mut()
-            .for_each(|x| *x = *x * 2. + (rng.gen::<f64>() - 0.5) * scaling);
-    }
 
     pub fn nb(
         r: &mut ArrayViewMut1<'_, f64>,
@@ -314,7 +281,7 @@ mod rust_fn {
             });
     }
 
-    pub fn compute_emission_probability_nb_betabinom_mix(
+    pub fn compute_emission_probability_nb(
         r: &mut ArrayViewMut3<'_, f64>,
         X: &ArrayView2<'_, f64>,
         base_nb_mean: &ArrayView2<'_, f64>,
@@ -370,7 +337,7 @@ mod rust_fn {
         }
     }
 
-    pub fn compute_emission_probability_bb_betabinom_mix(
+    pub fn compute_emission_probability_bb_mix(
         r: &mut ArrayViewMut3<'_, f64>,
         X: &ArrayView2<'_, f64>,
         base_nb_mean: &ArrayView2<'_, f64>,
@@ -431,7 +398,7 @@ mod rust_fn {
             .collect()
     }
 
-    pub fn compute_emission_probability_bb_betabinom_mix_weighted(
+    pub fn compute_emission_probability_bb_mix_weighted(
         r: &mut ArrayViewMut3<'_, f64>,
         X: &ArrayView2<'_, f64>,
         base_nb_mean: &ArrayView2<'_, f64>,
@@ -507,29 +474,5 @@ mod rust_fn {
                 *r = -(n + 1.).ln() - lnbeta(n - k + 1., k + 1.) + lnbeta(k + a, n - k + b)
                     - lnbeta(a, b)
             });
-    }
-
-    pub fn max_min(x: &ArrayViewD<'_, f64>) -> Array1<f64> {
-        if x.len() == 0 {
-            return arr1(&[]); // If the array has no elements, return empty array
-        }
-
-        let max_val = x
-            .iter()
-            .map(|a| OrderedFloat(*a))
-            .max()
-            .expect("Error calculating max value.")
-            .0;
-
-        let min_val = x
-            .iter()
-            .map(|a| OrderedFloat(*a))
-            .min()
-            .expect("Error calculating min value.")
-            .0;
-
-        let result_array = arr1(&[max_val, min_val]);
-
-        result_array
     }
 }
