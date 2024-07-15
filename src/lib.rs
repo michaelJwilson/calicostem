@@ -8,7 +8,7 @@ use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 
 // See https://itnext.io/how-to-bind-python-numpy-with-rust-ndarray-2efa5717ed21
 #[pymodule]
-fn core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn calicostem(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
     fn bb<'py>(
         py: Python<'py>,
