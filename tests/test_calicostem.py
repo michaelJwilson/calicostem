@@ -59,6 +59,9 @@ def thread_betabinom(k, n, a, b, num_threads=NUM_THREADS, executor=None):
 
 
 def get_mock_data():
+    """
+    Mock data for simple scipy nbinom & betabinom testing (1D).
+    """
     NN = 1_000_000
 
     ns = 100 + np.arange(NN)
@@ -76,22 +79,31 @@ def get_mock_data():
 
 @pytest.fixture
 def mock_data():
+    """
+    Mock data as a fixture
+    """
     return get_mock_data()
 
 
 def test_sci_py(mock_data, benchmark):
+    """
+    Benchmark scipy nbinom.
+    """
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
-    def wrap_sci_py():
+    def call():
         return scipy.stats.nbinom.logpmf(ks, ns, ps)
 
     benchmark.group = "nb"
-    result = benchmark(wrap_sci_py)
+    result = benchmark(call)
 
     assert np.allclose(sci_py, result)
 
 
 def test_sci_py_moments(mock_data, benchmark):
+    """
+    Benchmark scipy nbinom when defined by moments.
+    """
     NN = 100
 
     mus = np.random.uniform(low=1.0, high=100.0, size=(NN, NN, NN))
@@ -99,43 +111,52 @@ def test_sci_py_moments(mock_data, benchmark):
 
     ks = np.random.randint(low=1, high=100, size=(NN, NN, NN)).astype(float)
 
-    def wrap_sci_py():
+    def call():
         ps = mus / var
         ns = mus * ps / (1.0 - ps)
 
         return scipy.stats.nbinom.logpmf(ks, ns, ps)
 
     benchmark.group = "nb_moments"
-    result = benchmark(wrap_sci_py)
+    result = benchmark(call)
 
 
 def test_sci_py_bb(mock_data, benchmark):
+    """
+    Benchmark scipy betabinom. 
+    """
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
-    def wrap_sci_py():
+    def call():
         return scipy.stats.betabinom.logpmf(ks, ns, aa, bb)
 
     benchmark.group = "bb"
-    result = benchmark(wrap_sci_py)
+    result = benchmark(call)
 
     assert np.allclose(sci_py_bb, result)
 
 
 def test_rust(mock_data, benchmark):
+    """
+    Benchmark rust nbinom.
+    """
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
     ks = ks.astype(float)
     ns = ns.astype(float)
 
-    def wrap_rust():
+    def call():
         return calicostem.nb(ks, ns, ps)
 
     benchmark.group = "nb"
-    rust_result = benchmark(wrap_rust)
+    rust_result = benchmark(call)
 
     assert np.allclose(sci_py, rust_result)
 
 
 def test_rust_moments(mock_data, benchmark):
+    """
+    Benchmark rust nbinom when defined by moments.
+    """
     NN = 100
 
     mus = np.random.uniform(low=1.0, high=100.0, size=(NN, NN, NN))
@@ -143,14 +164,17 @@ def test_rust_moments(mock_data, benchmark):
 
     ks = np.random.randint(low=1, high=100, size=(NN, NN, NN)).astype(float)
 
-    def wrap_rust():
+    def call():
         return calicostem.nb_moments(ks, mus, var)
 
     benchmark.group = "nb_moments"
-    rust_result = benchmark(wrap_rust)
+    rust_result = benchmark(call)
 
 
 def test_compute_emission_probability_nb(benchmark):
+    """
+    Benchmark CalicoST NB emission.
+    """
     n_state, n_obs, n_spots = 3, 10, 25
 
     X = np.random.uniform(low=1.0, high=10.0, size=(n_obs, n_spots))
@@ -159,7 +183,7 @@ def test_compute_emission_probability_nb(benchmark):
     log_mu = np.random.uniform(low=-2.0, high=0.0, size=(n_state, n_spots))
     alphas = np.random.uniform(low=0.0, high=1.0, size=(n_state, n_spots))
 
-    def wrap_rust():
+    def call():
         tmp_log_rdr = calicostem.compute_emission_probability_nb(
             X,
             base_nb_mean,
@@ -169,9 +193,12 @@ def test_compute_emission_probability_nb(benchmark):
         )
 
     benchmark.group = "compute_emission_probability_nb"
-    result = benchmark(wrap_rust)
+    result = benchmark(call)
 
 def test_rust_bb(mock_data, benchmark):
+    """
+    Benchmark rust betabinomial
+    """
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
     ks = ks.astype(float)
     ns = ns.astype(float)
@@ -186,6 +213,9 @@ def test_rust_bb(mock_data, benchmark):
 
 
 def test_thread(mock_data, benchmark):
+    """
+    Benchmark threaded scipy nbinom.
+    """
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
     executor = ThreadPoolExecutor(max_workers=NUM_THREADS)
@@ -200,6 +230,9 @@ def test_thread(mock_data, benchmark):
 
 
 def test_thread_bb(mock_data, benchmark):
+    """                                                                                                                                                                                                              
+    Benchmark threaded scipy betabinom.                                                                                                                                                                             
+    """
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
 
     executor = ThreadPoolExecutor(max_workers=NUM_THREADS)
@@ -215,6 +248,9 @@ def test_thread_bb(mock_data, benchmark):
 
 @line_profiler.profile
 def profile(ks, ns, ps, aa, bb, sci_py, sci_py_bb, iterations=100):
+    """
+    Setup for line profiling.
+    """
     ks = ks.astype(float)
     ns = ns.astype(float)
 
