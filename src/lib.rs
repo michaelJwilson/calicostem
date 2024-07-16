@@ -329,7 +329,7 @@ mod rust_fn {
                 for spot in 0..n_spots {
                     let idx = segment * n_spots + spot;
 
-                    if tumor_prop[[segment, spot]].is_nan() {
+                    if tumor_prop[[segment, spot]].is_nan() {		       
                         state_chunk[idx] = std::f64::NAN;
                         continue;
                     }
@@ -500,8 +500,7 @@ mod rust_fn {
             .and(b)
             .par_for_each(|r, &k, &n, &a, &b| {
                 // https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
-                *r = -(n + 1.).ln() - lnbeta(n - k + 1., k + 1.) + lnbeta(k + a, n - k + b)
-                    - lnbeta(a, b)
+                *r = -(n + 1.).ln() - lnbeta(n - k + 1., k + 1.) - lnbeta(a, b) + lnbeta(k + a, n - k + b)
             });
     }
 }
