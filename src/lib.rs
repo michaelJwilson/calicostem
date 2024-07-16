@@ -329,18 +329,18 @@ mod rust_fn {
                 for spot in 0..n_spots {
                     let idx = segment * n_spots + spot;
 
-                    if tumor_prop[[segment, spot]].is_nan() {		       
-                        state_chunk[idx] = std::f64::NAN;
-                        continue;
-                    }
-
-                    let base = base_nb_mean[[segment, spot]];
+		    let base = base_nb_mean[[segment, spot]];
 
                     if base > 0. {
+		        if tumor_prop[[segment, spot]].is_nan() {
+                     	   state_chunk[idx] = std::f64::NAN;
+                           continue;
+                    	}	   
+		       
+
                         let shift = base * (1. - tumor_prop[[segment, spot]]);
                         let x = X[[segment, spot]];
     
-                        // ln_gamma(x + 1.0)
                         let lnGx = lnfact(x as u32);
                         let mu = log_mu[[state, spot]].exp();
     
@@ -382,13 +382,13 @@ mod rust_fn {
             for segment in 0..n_obs {
                 for spot in 0..n_spots {
                     let idx = segment * n_spots + spot;
-
-                    if tumor_prop[[segment, spot]].is_nan() {
-                        state_chunk[idx] = std::f64::NAN;
-                        continue;
-                    }
                 
                     if total_bb_RD[[segment, spot]] > 0. {
+		        if tumor_prop[[segment, spot]].is_nan() {
+                     	   state_chunk[idx] = std::f64::NAN;
+                           continue;
+                        }	   
+		    
                         let kk = X[[segment, spot]];
                         let nn = total_bb_RD[[segment, spot]];
 
@@ -452,12 +452,12 @@ mod rust_fn {
                 for spot in 0..n_spots {
                     let idx = segment * n_spots + spot;  
 
-                    if tumor_prop[[segment, spot]].is_nan() {              
-                        state_chunk[idx] = std::f64::NAN;
-                        continue;
-                    }
-
                     if total_bb_RD[[segment, spot]] > 0. {
+		        if tumor_prop[[segment, spot]].is_nan() {
+                            state_chunk[idx] = std::f64::NAN;
+                            continue;
+                        }
+
                         let kk = X[[segment, spot]];
                         let nn = total_bb_RD[[segment, spot]];
     
