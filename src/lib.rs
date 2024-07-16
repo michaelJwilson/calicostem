@@ -88,9 +88,6 @@ fn calicostem(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let n_spots = X.shape()[1];
         let n_states = log_mu.shape()[0];
 
-        // let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
-        // let mut view_result = result.view_mut();
-
         let mut interim = vec![0.0; n_states * n_obs * n_spots];
         
         rust_fn::compute_emission_probability_nb(
@@ -129,12 +126,8 @@ fn calicostem(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let n_spots = X.shape()[1];
         let n_states = pbinom.shape()[0];
 
-        // let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
-        // let mut view_result = result.view_mut();
-
         let mut interim = vec![0.0; n_states * n_obs * n_spots];
 
-        // &mut view_result,
         rust_fn::compute_emission_probability_bb_mix(
             &mut interim,
             &X,
@@ -178,12 +171,8 @@ fn calicostem(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let n_spots = X.shape()[1];
         let n_states = pbinom.shape()[0];
 
-        // let mut result = Array3::<f64>::zeros((n_states, n_obs, n_spots));
-        // let mut view_result = result.view_mut();
-
         let mut interim = vec![0.0; n_states * n_obs * n_spots];
 
-        // &mut view_result,
         rust_fn::compute_emission_probability_bb_mix_weighted(
             &mut interim,
             &X,
