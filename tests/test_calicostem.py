@@ -150,7 +150,7 @@ def test_rust_moments(mock_data, benchmark):
     rust_result = benchmark(wrap_rust)
 
 
-def test_rust_compute_emission_probability_nb_betabinom_mix(benchmark):
+def test_compute_emission_probability_nb(benchmark):
     n_state, n_obs, n_spots = 3, 10, 25
 
     X = np.random.uniform(low=1.0, high=10.0, size=(n_obs, n_spots))
@@ -160,7 +160,7 @@ def test_rust_compute_emission_probability_nb_betabinom_mix(benchmark):
     alphas = np.random.uniform(low=0.0, high=1.0, size=(n_state, n_spots))
 
     def wrap_rust():
-        return calicostem.compute_emission_probability_nb_betabinom_mix(
+        tmp_log_rdr = calicostem.compute_emission_probability_nb(
             X,
             base_nb_mean,
             tumor_prop,
@@ -168,11 +168,8 @@ def test_rust_compute_emission_probability_nb_betabinom_mix(benchmark):
             alphas,
         )
 
-    # benchmark.group = "compute_emission_probability_nb_betabinom_mix"
-    # result = benchmark(wrap_rust)
-    
-    result = wrap_rust()    
-    print(result)
+    benchmark.group = "compute_emission_probability_nb"
+    result = benchmark(wrap_rust)
 
 def test_rust_bb(mock_data, benchmark):
     ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
