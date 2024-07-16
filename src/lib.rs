@@ -299,6 +299,15 @@ mod rust_fn {
             });
     }
 
+    fn get_model_param_with_broadcast(param_array: &ArrayView2<'_, f64>, state: usize, spot: usize, n_spots: usize) -> f64 {
+        if param_array.shape()[1] == n_spots {
+            return param_array[[state, spot]]
+        }
+        else {
+            return param_array[[state, 0]]
+        }
+    }
+
     pub fn compute_emission_probability_nb(
         r: &mut Vec<f64>,
         X: &ArrayView2<'_, f64>,
@@ -328,7 +337,6 @@ mod rust_fn {
             for segment in 0..n_obs {
                 for spot in 0..n_spots {
                     let idx = segment * n_spots + spot;
-
 		    let base = base_nb_mean[[segment, spot]];
 
                     if base > 0. {
@@ -337,15 +345,18 @@ mod rust_fn {
                            continue;
                     	}	   
 		       
-
                         let shift = base * (1. - tumor_prop[[segment, spot]]);
                         let x = X[[segment, spot]];
     
                         let lnGx = lnfact(x as u32);
-                        let mu = log_mu[[state, spot]].exp();
+
+			//  log_mu[[state, spot]].exp();
+                        let mu = get_model_param_with_broadcast(log_mu, state, spot, n_spots).exp();
     
                         let mean = shift + (mu * base * tumor_prop[[segment, spot]]);
-                        let var = mean + alphas[[state, spot]] * mean.powf(2.);
+
+			let alpha = get_model_param_with_broadcast(alphas, state, spot, n_spots);
+                        let var = mean + alpha * mean.powf(2.);
     
                         let p = mean / var;
                         let n = mean * p / (1. - p);
@@ -397,10 +408,11 @@ mod rust_fn {
 
                         let shift = 0.5 * (1. - tumor_prop[[segment, spot]]);
 
-                        let tau = taus[[state, spot]];
+			let tau = get_model_param_with_broadcast(taus, state, spot, n_spots);
+			let pbin = get_model_param_with_broadcast(pbinom, state, spot, n_spots);
 
-                        let mix_pa = pbinom[[state, spot]] * tumor_prop[[segment, spot]] + shift;
-                        let mix_pb = (1. - pbinom[[state, spot]]) * tumor_prop[[segment, spot]] + shift;
+                        let mix_pa = pbin * tumor_prop[[segment, spot]] + shift;
+                        let mix_pb = (1. - pbin) * tumor_prop[[segment, spot]] + shift;
     
                         let aa = mix_pa * tau;
                         let bb = mix_pb * tau;
@@ -465,15 +477,22 @@ mod rust_fn {
     
                         let term_logn = -(nn + 1.).ln();
                         let term_beta = -lnbeta(nn - kk + 1., kk + 1.);
-    
-                        let mu = (log_mu[[state, spot]] - log_mu_shift[[segment_chunk, spot]]).exp();
-                        let tau = taus[[state, spot]];
-    
+
+			//  (log_mu[[state, spot]] - log_mu_shift[[segment_chunk, spot]]).exp();
+			let mu = (
+			    get_model_param_with_broadcast(log_mu, state, spot, n_spots)
+			  - get_model_param_with_broadcast(log_mu_shift, segment_chunk, spot, n_spots)
+			).exp();
+
+                        // let tau = taus[[state, spot]];
+			let tau = get_model_param_with_broadcast(taus, state, spot, n_spots);
+			let pbin = get_model_param_with_broadcast(pbinom, state, spot, n_spots);
+
                         let weighted_tumor_prop = (tumor_prop[[segment, spot]] * mu) / (tumor_prop[[segment, spot]] * mu + 1. - tumor_prop[[segment, spot]]); 
                         let shift = 0.5 * (1. - weighted_tumor_prop);
     
-                        let mix_pa = pbinom[[state, spot]] * weighted_tumor_prop + shift;
-                        let mix_pb = (1. - pbinom[[state, spot]]) * weighted_tumor_prop + shift;
+                        let mix_pa = pbin * weighted_tumor_prop + shift;
+                        let mix_pb = (1. - pbin) * weighted_tumor_prop + shift;
         
                         let aa = mix_pa * tau;
                         let bb = mix_pb * tau;
