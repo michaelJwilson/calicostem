@@ -323,6 +323,7 @@ mod rust_fn {
             https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.nbinom.html
         */
 
+	// TODO Toggle threading on n_spots
         let n_obs = X.shape()[0];
         let n_spots = X.shape()[1];
         let n_states = log_mu.shape()[0];
@@ -379,6 +380,7 @@ mod rust_fn {
         taus: &ArrayView2<'_, f64>,
         tumor_prop: &ArrayView2<'_, f64>,
     ) {
+        // TODO Toggle threading on n_spots
         let n_obs = X.shape()[0];
         let n_spots = X.shape()[1];
         let n_states = pbinom.shape()[0];
@@ -447,6 +449,7 @@ mod rust_fn {
         log_mu: &ArrayView2<'_, f64>,
         log_mu_shift: &ArrayView2<'_, f64>,
     ) {
+        // TODO Toggle threading on n_spots
         let n_obs = X.shape()[0];
         let n_spots = X.shape()[1];
         let n_states = pbinom.shape()[0];
