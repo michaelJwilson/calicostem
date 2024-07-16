@@ -485,6 +485,16 @@ mod rust_fn {
         });
     }
 
+    fn get_lnbeta(a: f64, b: f64) -> f64 {
+        // TODO check equality.
+        if a <= 0. || b <= 0. {
+            return std::f64::NAN;
+        }
+        else {
+            return lnbeta(a, b)
+        }
+    }
+
     pub fn bb(
         r: &mut ArrayViewMut1<'_, f64>,
         k: &ArrayView1<'_, f64>,
@@ -500,7 +510,7 @@ mod rust_fn {
             .and(b)
             .par_for_each(|r, &k, &n, &a, &b| {
                 // https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
-                *r = -(n + 1.).ln() - lnbeta(n - k + 1., k + 1.) - lnbeta(a, b) + lnbeta(k + a, n - k + b)
+                *r = -(n + 1.).ln() - get_lnbeta(n - k + 1., k + 1.) - get_lnbeta(a, b) + get_lnbeta(k + a, n - k + b)
             });
     }
 }

@@ -1,7 +1,7 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-import core
+import calicostem
 import line_profiler
 import numpy as np
 import pytest
@@ -127,7 +127,7 @@ def test_rust(mock_data, benchmark):
     ns = ns.astype(float)
 
     def wrap_rust():
-        return core.nb(ks, ns, ps)
+        return calicostem.nb(ks, ns, ps)
 
     benchmark.group = "nb"
     rust_result = benchmark(wrap_rust)
@@ -144,7 +144,7 @@ def test_rust_moments(mock_data, benchmark):
     ks = np.random.randint(low=1, high=100, size=(NN, NN, NN)).astype(float)
 
     def wrap_rust():
-        return core.nb_moments(ks, mus, var)
+        return calicostem.nb_moments(ks, mus, var)
 
     benchmark.group = "nb_moments"
     rust_result = benchmark(wrap_rust)
@@ -160,7 +160,7 @@ def test_rust_compute_emission_probability_nb_betabinom_mix(benchmark):
     alphas = np.random.uniform(low=0.0, high=1.0, size=(n_state, n_spots))
 
     def wrap_rust():
-        return core.compute_emission_probability_nb_betabinom_mix(
+        return calicostem.compute_emission_probability_nb_betabinom_mix(
             X,
             base_nb_mean,
             tumor_prop,
@@ -180,26 +180,12 @@ def test_rust_bb(mock_data, benchmark):
     ns = ns.astype(float)
 
     def wrap_rust():
-        return core.bb(ks, ns, aa, bb)
+        return calicostem.bb(ks, ns, aa, bb)
 
     benchmark.group = "bb"
     rust_result = benchmark(wrap_rust)
 
     assert np.allclose(sci_py_bb, rust_result)
-
-
-def test_rust_bbab(mock_data, benchmark):
-    ks, ns, ps, aa, bb, sci_py, sci_py_bb = mock_data
-    ks = ks.astype(float)
-    ns = ns.astype(float)
-
-    def wrap_rust():
-        return core.bbab(ks, ns, aa, bb)
-
-    benchmark.group = "bb"
-    rust_result = benchmark(wrap_rust)
-
-    # TODO assert
 
 
 def test_thread(mock_data, benchmark):
@@ -237,11 +223,11 @@ def profile(ks, ns, ps, aa, bb, sci_py, sci_py_bb, iterations=100):
 
     for _ in range(iterations):
         sci_py = scipy.stats.nbinom.logpmf(ks, ns, ps)
-        rust_result = core.nb(ks, ns, ps)
+        rust_result = calicostem.nb(ks, ns, ps)
         thread_result = thread_nbinom(ks, ns, ps)
 
         sci_py_bb = scipy.stats.betabinom.logpmf(ks, ns, aa, bb)
-        rust_bb = core.bb(ks, ns, aa, bb)
+        rust_bb = calicostem.bb(ks, ns, aa, bb)
 
     assert np.allclose(sci_py, thread_result)
     assert np.allclose(sci_py, rust_result)
