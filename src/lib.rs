@@ -31,6 +31,29 @@ fn calicostem(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    fn bb_ab<'py>(
+        py: Python<'py>,
+        ink: PyReadonlyArray1<f64>,
+        inn: PyReadonlyArray1<f64>,
+        ina: PyReadonlyArray1<f64>,
+        inb: PyReadonlyArray1<f64>,
+        inzp: PyReadonlyArray1<f64>,
+    ) -> &'py PyArray1<f64> {
+        let k = ink.as_array();
+        let n = inn.as_array();
+        let a = ina.as_array();
+        let b = inb.as_array();
+        let zp = inzp.as_array();
+
+        let shape = k.shape();
+        let mut result = Array1::<f64>::zeros(shape[0]);
+        let mut vresult = result.view_mut();
+
+        rust_fn::bb_ab(&mut vresult, &k, &n, &a, &b, &zp);
+        result.into_pyarray(py)
+    }
+
+    #[pyfn(m)]
     fn nb<'py>(
         py: Python<'py>,
         ink: PyReadonlyArray1<f64>,
@@ -339,13 +362,11 @@ mod rust_fn {
                         let x = X[[segment, spot]];
     
                         let lnGx = lnfact(x as u32);
-
-			//  log_mu[[state, spot]].exp();
                         let mu = get_model_param_with_broadcast(log_mu, state, spot, n_spots).exp();
     
                         let mean = shift + (mu * base * tumor_prop[[segment, spot]]);
 
-			let alpha = get_model_param_with_broadcast(alphas, state, spot, n_spots);
+			            let alpha = get_model_param_with_broadcast(alphas, state, spot, n_spots);
                         let var = mean + alpha * mean.powf(2.);
     
                         let p = mean / var;
@@ -522,6 +543,27 @@ mod rust_fn {
             .par_for_each(|r, &k, &n, &a, &b| {
                 // https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
                 *r = -(n + 1.).ln() - get_lnbeta(n - k + 1., k + 1.) - get_lnbeta(a, b) + get_lnbeta(k + a, n - k + b)
+            });
+    }
+
+    pub fn bb_ab(
+        r: &mut ArrayViewMut1<'_, f64>,
+        k: &ArrayView1<'_, f64>,
+        n: &ArrayView1<'_, f64>,
+        a: &ArrayView1<'_, f64>,
+        b: &ArrayView1<'_, f64>,
+        zp: &ArrayView1<'_, f64>,
+    ) {
+        //  See https://docs.rs/ndarray/latest/ndarray/struct.Zip.html#method.par_for_each
+        Zip::from(r)
+            .and(k)
+            .and(n)
+            .and(a)
+            .and(b)
+            .and(zp)
+            .for_each(|r, &k, &n, &a, &b, &zp| {
+                // https://github.com/scipy/scipy/blob/87c46641a8b3b5b47b81de44c07b840468f7ebe7/scipy/stats/_discrete_distns.py#L238
+                *r = zp -get_lnbeta(a, b) + get_lnbeta(k + a, n - k + b)
             });
     }
 }
