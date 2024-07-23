@@ -1,0 +1,4 @@
+Compilation
+```
+maturin develop --release
+```
